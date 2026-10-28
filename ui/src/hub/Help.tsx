@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { font, palette } from "../tokens/values";
 import { theme } from "./theme";
@@ -100,6 +101,38 @@ export function Help() {
           </li>
         ))}
       </ol>
+      <Credit />
     </div>
+  );
+}
+
+// Who made Koe and where to ask: quiet, at the very end of Help.
+function Credit() {
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    import("@tauri-apps/api/app")
+      .then(({ getVersion }) => getVersion())
+      .then(setVersion)
+      .catch(() => {});
+  }, []);
+  return (
+    <footer
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "baseline",
+        gap: 16,
+        marginTop: 34,
+        paddingTop: 14,
+        borderTop: `1px solid ${theme.rule}`,
+        fontSize: 12.5,
+        color: theme.textFaint,
+      }}
+    >
+      <span>
+        Made by Ibrahim Khan — questions or ideas, ping me on Slack.
+      </span>
+      {version && <span style={{ fontFamily: font.mono, fontSize: 11 }}>Koe {version}</span>}
+    </footer>
   );
 }
