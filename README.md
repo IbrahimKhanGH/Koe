@@ -10,7 +10,18 @@ fillers ("um", "like"), resolves self-corrections ("2pm, no wait, 3pm" → "3pm"
 and fixes punctuation and lists. **There is no cloud mode, no account, no
 telemetry, and no network code in the app.**
 
-## Install (macOS, Apple Silicon)
+## Sharing it with coworkers
+
+```bash
+scripts/build-local.sh --dmg     # → target/release/bundle/dmg/Koe-<version>.dmg (~5 MB)
+```
+
+Send the dmg (Slack, Drive, AirDrop). It holds Koe, an Applications shortcut, and
+**Read Me First**, which walks through the one-time *Open Anyway* approval (Koe isn't
+signed with an Apple Developer ID), the permissions, and downloading models from the
+Models page. No developer tools needed on their side.
+
+## Build it yourself (macOS, Apple Silicon)
 
 Prerequisites: Xcode command-line tools (`xcode-select --install`),
 [Rust](https://rustup.rs), Node.js, and [pnpm](https://pnpm.io).

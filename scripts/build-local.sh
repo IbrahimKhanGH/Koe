@@ -9,11 +9,15 @@
 # An ad-hoc signature changes on every rebuild, so macOS treats each build as a
 # new app: re-grant Microphone and Accessibility after installing a new build.
 #
-# Usage: scripts/build-local.sh
+# Usage: scripts/build-local.sh [--dmg]
+#   --dmg   also package Koe.app, an Applications shortcut, and "Read Me First"
+#           into target/release/bundle/dmg/Koe-<version>.dmg, to hand to others.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 REPO_ROOT="$PWD"
+DMG=0
+[ "${1:-}" = "--dmg" ] && DMG=1
 
 TAURI="$REPO_ROOT/ui/node_modules/.bin/tauri"
 if [ ! -x "$TAURI" ]; then
@@ -44,6 +48,20 @@ codesign --force --options runtime --sign - "$APP/Contents/MacOS/koe-llm-worker"
 codesign --force --options runtime --entitlements "$REPO_ROOT/src-tauri/Entitlements.plist" \
   --sign - "$APP"
 codesign --verify --strict --verbose=1 "$APP"
+
+if [ "$DMG" = 1 ]; then
+  VERSION="$(plutil -extract version raw -o - src-tauri/tauri.conf.json)"
+  OUT="$REPO_ROOT/target/release/bundle/dmg/Koe-$VERSION.dmg"
+  STAGE="$(mktemp -d)"
+  cp -R "$APP" "$STAGE/Koe.app"
+  ln -s /Applications "$STAGE/Applications"
+  cp "$REPO_ROOT/packaging/Read Me First.html" "$STAGE/"
+  mkdir -p "$(dirname "$OUT")"
+  rm -f "$OUT"
+  hdiutil create -volname "Koe" -srcfolder "$STAGE" -ov -format UDZO "$OUT" >/dev/null
+  rm -rf "$STAGE"
+  echo "Dmg: $OUT ($(du -h "$OUT" | cut -f1))"
+fi
 
 echo
 echo "App: $APP"

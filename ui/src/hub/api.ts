@@ -277,6 +277,17 @@ export async function getModels(): Promise<ModelsReport> {
   }
 }
 
+/** Open Terminal downloading a tier ("compact" | "balanced" | "max") or one model
+ * file with the script bundled in Koe. Resolves to null, or why it couldn't. */
+export async function downloadModels(target: string): Promise<string | null> {
+  try {
+    await invoke<void>("download_models", { target });
+    return null;
+  } catch (e) {
+    return typeof e === "string" ? e : null;
+  }
+}
+
 export async function restartApp(): Promise<void> {
   try {
     await invoke<void>("restart_app");

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { font, palette } from "../tokens/values";
 import { theme } from "./theme";
 import { Button, Card, Eyebrow, PageTitle } from "./ui";
-import { getModels, restartApp, type ModelInfo, type ModelKind, type ModelsReport, type Settings, type Tier } from "./api";
+import { downloadModels, getModels, restartApp, type ModelInfo, type ModelKind, type ModelsReport, type Settings, type Tier } from "./api";
 
 const TIERS: { key: Tier; name: string; blurb: string }[] = [
   { key: "compact", name: "Compact", blurb: "Speech only. Pastes what you said, with punctuation; no rewriting." },
@@ -30,57 +30,20 @@ function gb(bytes: number): string {
   return `${v < 1 ? v.toFixed(2) : v.toFixed(1)} GB`;
 }
 
-// A shell command with a copy button. The app can't download models itself (it
-// has no network code); this is the one line to run instead.
-function Command({ cmd, wrap = false }: { cmd: string; wrap?: boolean }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(cmd);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
-    } catch {
-      /* the text stays selectable */
-    }
+// Opens Terminal running the download script bundled with Koe; the page polls,
+// so models appear here as soon as the script installs them.
+function Download({ target, label }: { target: string; label: string }) {
+  const [note, setNote] = useState<string | null>(null);
+  const start = async () => {
+    const problem = await downloadModels(target);
+    setNote(problem ?? "Downloading in Terminal. This page updates when it's done.");
   };
   return (
-    <div style={{ display: "flex", alignItems: "stretch", border: `1px solid ${theme.ruleStrong}`, borderRadius: 3, overflow: "hidden" }}>
-      <code
-        style={{
-          flex: 1,
-          minWidth: 0,
-          padding: "7px 10px",
-          fontFamily: font.mono,
-          fontSize: 11.5,
-          color: theme.textStrong,
-          background: palette.ivory,
-          whiteSpace: wrap ? "normal" : "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          lineHeight: 1.5,
-          userSelect: "all",
-        }}
-      >
-        {cmd}
-      </code>
-      <button
-        onClick={() => void copy()}
-        className="koe-seg"
-        style={{
-          border: "none",
-          borderLeft: `1px solid ${theme.ruleStrong}`,
-          background: "transparent",
-          cursor: "pointer",
-          padding: "0 11px",
-          fontFamily: font.mono,
-          fontSize: 10.5,
-          letterSpacing: "0.1em",
-          textTransform: "uppercase",
-          color: copied ? palette.red : theme.textMuted,
-        }}
-      >
-        {copied ? "Copied" : "Copy"}
-      </button>
+    <div>
+      <Button variant="ink" size="sm" onClick={() => void start()}>
+        {label}
+      </Button>
+      {note && <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 8, lineHeight: 1.5 }}>{note}</div>}
     </div>
   );
 }
@@ -88,6 +51,7 @@ function Command({ cmd, wrap = false }: { cmd: string; wrap?: boolean }) {
 function TierCard({ tier, models }: { tier: (typeof TIERS)[number]; models: ModelInfo[] }) {
   const parts = models.filter((m) => m.tiers.includes(tier.key));
   const total = parts.reduce((s, m) => s + m.size, 0);
+  const remaining = parts.filter((m) => !m.installed).reduce((s, m) => s + m.size, 0);
   const have = parts.filter((m) => m.installed).length;
   const complete = parts.length > 0 && have === parts.length;
   const isDefault = tier.key === "balanced";
@@ -132,7 +96,7 @@ function TierCard({ tier, models }: { tier: (typeof TIERS)[number]; models: Mode
             {complete ? "Installed" : have > 0 ? `${have} of ${parts.length} installed` : `${gb(total)} to download`}
           </Eyebrow>
         </div>
-        {!complete && <Command wrap cmd={`scripts/get-models.sh --tier ${tier.key}`} />}
+        {!complete && <Download target={tier.key} label={`Download ${gb(remaining)}`} />}
       </div>
     </div>
   );
@@ -250,8 +214,8 @@ function KindSection({
               </span>
               <span style={{ display: "block", fontSize: 12.5, color: theme.textMuted, marginTop: 3 }}>{m.note}</span>
               {!m.installed && (
-                <span style={{ display: "block", marginTop: 10, maxWidth: 440 }}>
-                  <Command cmd={`scripts/get-models.sh ${m.file}`} />
+                <span style={{ display: "block", marginTop: 10 }}>
+                  <Download target={m.file} label={`Download ${gb(m.size)}`} />
                 </span>
               )}
             </span>
@@ -343,9 +307,10 @@ export function ModelsPane({ settings, onChange }: { settings: Settings; onChang
       ))}
 
       <div style={{ fontSize: 12.5, color: theme.textMuted, lineHeight: 1.7 }}>
-        Koe never downloads anything itself. Run a command above from the Koe folder, or install files someone already
-        downloaded with{" "}
-        <code style={{ fontFamily: font.mono, fontSize: 11.5, whiteSpace: "nowrap" }}>scripts/get-models.sh --from FOLDER</code>.
+        Download opens Terminal and runs the script that ships inside Koe: it fetches from the model makers' official
+        pages and checks every file's fingerprint before installing. Koe itself never connects to the internet. Have
+        the files already? Run{" "}
+        <code style={{ fontFamily: font.mono, fontSize: 11.5, whiteSpace: "nowrap" }}>get-models.sh --from FOLDER</code>.
         {report.dir && (
           <>
             <br />

@@ -178,6 +178,12 @@ fn get_models() -> models::ModelsReport {
     models::report()
 }
 
+/// Open Terminal downloading a tier or model with the bundled script.
+#[tauri::command]
+fn download_models(app: tauri::AppHandle, target: String) -> Result<(), String> {
+    models::open_download(&app, &target)
+}
+
 /// Relaunch Koe, so a newly chosen model is loaded.
 #[tauri::command]
 fn restart_app(app: tauri::AppHandle) {
@@ -300,6 +306,7 @@ pub fn run() {
             request_input_monitoring,
             set_hands_free_hotkey,
             get_models,
+            download_models,
             restart_app
         ])
         .setup(|app| {

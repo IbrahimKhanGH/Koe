@@ -22,6 +22,9 @@
 # (override with KOE_MODELS_DIR).
 set -euo pipefail
 
+# Works from the repo and from inside Koe.app (Contents/Resources keeps the same
+# scripts/ + models/ layout). --from paths are relative to where it was run.
+CALLER_PWD="$PWD"
 cd "$(dirname "$0")/.."
 MANIFEST="$PWD/models/manifest.json"
 DEST="${KOE_MODELS_DIR:-$HOME/Library/Application Support/Koe/models}"
@@ -40,7 +43,7 @@ FORCE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --all) ALL=1; shift ;;
-    --from) FROM="$2"; shift 2 ;;
+    --from) FROM="$(cd "$CALLER_PWD" && cd "$2" && pwd)"; shift 2 ;;
     --tier) TIER="$2"; shift 2 ;;
     --force) FORCE=1; shift ;;
     --list)
@@ -137,4 +140,4 @@ done
 
 echo
 echo "Models folder: $DEST"
-echo "Relaunch Koe to pick them up."
+echo "Restart Koe to load them (Models page → Restart now)."

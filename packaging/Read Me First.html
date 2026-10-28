@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Koe — Read me first</title>
+<style>
+  :root {
+    --ivory: #F4F0E6; --paper: #FAF7F0; --ink: #121211; --charcoal: #2B2A27;
+    --graphite: #55524B; --slate: #8A857A; --rule: #DDD6C6; --red: #D62429; --chartreuse: #C4C529;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ivory); color: var(--charcoal);
+    font: 15px/1.6 "Helvetica Neue", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 56px 32px 72px; }
+  .eyebrow { font: 11px/1 "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--slate); }
+  .eyebrow b { color: var(--red); font-weight: 400; margin-right: 8px; }
+  .mark { display: flex; align-items: center; gap: 12px; }
+  .mark .koe { font-weight: 700; font-size: 22px; letter-spacing: -.02em; color: var(--ink); }
+  .mark .sep { width: 1px; height: 22px; background: #C2BAA8; }
+  .mark .kanji { font-family: "Hiragino Mincho ProN", serif; font-weight: 600; font-size: 21px; color: var(--ink); }
+  h1 { font-size: 44px; line-height: 1.02; letter-spacing: -.035em; font-weight: 500; color: var(--ink); margin: 28px 0 14px; }
+  h1 span { color: var(--slate); }
+  .lede { color: var(--graphite); max-width: 560px; margin: 0; }
+  .thread { display: flex; align-items: center; gap: 6px; margin: 30px 0 34px; }
+  .thread i { width: 28px; height: 3px; background: var(--red); }
+  .thread s { flex: 1; height: 1px; background: #C2BAA8; }
+  ol { list-style: none; padding: 0; margin: 0; counter-reset: step; }
+  li { display: grid; grid-template-columns: 52px 1fr; gap: 16px; padding: 22px 0; border-top: 1px solid var(--rule); counter-increment: step; }
+  li::before { content: counter(step, decimal-leading-zero); font: 12px/1.9 "SF Mono", ui-monospace, Menlo, monospace; color: var(--red); }
+  li h2 { margin: 0 0 6px; font-size: 17px; letter-spacing: -.01em; color: var(--ink); }
+  li p { margin: 0; color: var(--graphite); }
+  li p + p { margin-top: 8px; }
+  kbd { font: 12px "SF Mono", ui-monospace, Menlo, monospace; color: var(--ink); background: var(--paper);
+        border: 1px solid #C2BAA8; border-bottom-width: 2px; border-radius: 2px; padding: 1px 6px; white-space: nowrap; }
+  code { font: 12.5px "SF Mono", ui-monospace, Menlo, monospace; background: var(--paper); border: 1px solid var(--rule); padding: 1px 5px; }
+  .path { color: var(--ink); font-weight: 600; }
+  .private { margin-top: 36px; padding: 22px 24px; background: var(--ink); color: var(--ivory); }
+  .private .eyebrow { color: #8F8A7E; }
+  .private ul { margin: 12px 0 0; padding: 0; list-style: none; }
+  .private li { display: flex; gap: 12px; padding: 5px 0; border: 0; grid-template-columns: none; }
+  .private li::before { content: ""; flex: 0 0 7px; height: 7px; margin-top: 9px; background: var(--chartreuse); }
+  .fine { margin-top: 30px; font-size: 13px; color: var(--slate); }
+</style>
+</head>
+<body>
+<main>
+  <div class="mark"><span class="koe">Koe</span><span class="sep"></span><span class="kanji">声</span></div>
+  <h1>Speak.<br><span>It's written.</span></h1>
+  <p class="lede">Koe (声, “voice”) turns what you say into clean text wherever your cursor is: Slack, mail, docs, code.
+     Everything runs on your Mac. Setup takes about five minutes, plus a one-time model download.</p>
+  <div class="thread"><i></i><s></s></div>
+
+  <div class="eyebrow">Install</div>
+  <ol>
+    <li><div><h2>Drag Koe into Applications</h2>
+      <p>In this window, drag <span class="path">Koe</span> onto the <span class="path">Applications</span> folder. Requires an Apple Silicon Mac on macOS 14 or later.</p></div></li>
+
+    <li><div><h2>Open it once from System Settings</h2>
+      <p>Open Koe from Applications. Because it isn't from the App Store, macOS stops it the first time: click <span class="path">Done</span>.</p>
+      <p>Then open <span class="path">System Settings → Privacy &amp; Security</span>, scroll down, click <span class="path">Open Anyway</span> next to Koe, and confirm. You only do this once.</p></div></li>
+
+    <li><div><h2>Flip three switches</h2>
+      <p>Koe's setup screen asks for <span class="path">Accessibility</span> (to type for you and see the fn key) and <span class="path">Microphone</span>. <span class="path">Input Monitoring</span> is optional.</p></div></li>
+
+    <li><div><h2>Download the models</h2>
+      <p>In Koe, open <span class="path">Models</span> and click <span class="path">Download</span> on <span class="path">Balanced</span> (5.9 GB). Choose <span class="path">Max</span> (20 GB) instead if your Mac has 32 GB of memory or more.</p>
+      <p>A Terminal window shows the download; every file is checked against a pinned fingerprint before it's installed. When it's done, click <span class="path">Restart now</span>.</p></div></li>
+
+    <li><div><h2>Talk</h2>
+      <p>Hold <kbd>fn</kbd>, speak, let go. Or press <kbd>⌘ ⇧ Space</kbd> to start and again to stop (change it in Settings). Add names and jargon under <span class="path">Dictionary</span>.</p></div></li>
+  </ol>
+
+  <section class="private">
+    <div class="eyebrow">Private by design</div>
+    <ul>
+      <li>Speech recognition and cleanup run entirely on your Mac. Koe has no network code at all.</li>
+      <li>What you dictate is never saved to disk or written to logs.</li>
+      <li>Pasted text is kept off Universal Clipboard and out of clipboard managers.</li>
+      <li>Models come from their makers' official pages, and each one is verified before it loads.</li>
+    </ul>
+  </section>
+
+  <p class="fine">If macOS says Koe “is damaged and can't be opened”, run this once in Terminal, then open it again:<br>
+    <code>xattr -dr com.apple.quarantine /Applications/Koe.app</code></p>
+</main>
+</body>
+</html>

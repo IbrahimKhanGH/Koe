@@ -92,3 +92,63 @@ pub fn report() -> ModelsReport {
         .collect();
     ModelsReport { dir: dir.display().to_string(), models }
 }
+
+/// Open Terminal running the download script bundled in Koe.app for `target`:
+/// a tier name or a model file from the manifest, nothing else. Koe itself never
+/// touches the network; the script does, in a window the user can watch.
+#[cfg(not(target_os = "macos"))]
+pub fn open_download(_app: &tauri::AppHandle, _target: &str) -> Result<(), String> {
+    Err("In-app model download is macOS-only; run scripts/get-models.sh".into())
+}
+
+#[cfg(target_os = "macos")]
+pub fn open_download(app: &tauri::AppHandle, target: &str) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    use tauri::Manager;
+
+    let arg = if ["compact", "balanced", "max"].contains(&target) {
+        format!("--tier {target}")
+    } else if koe_core::models::manifest().iter().any(|m| m.file == target) {
+        shell_quote(target)
+    } else {
+        return Err(format!("not a known model or tier: {target}"));
+    };
+
+    // Bundled at Contents/Resources/scripts; in dev, the repo's own copy.
+    let bundled = app.path().resource_dir().map(|d| d.join("scripts/get-models.sh"));
+    let script = match bundled {
+        Ok(path) if path.exists() => path,
+        _ => PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../scripts/get-models.sh"),
+    };
+
+    let command_file = std::env::temp_dir().join("koe-get-models.command");
+    let body = format!(
+        "#!/bin/bash\nclear\necho \"Koe — downloading models. Nothing about you is sent; files are checked before install.\"\necho\n{} {arg}\necho\nread -n 1 -s -r -p \"Press any key to close this window.\"\n",
+        shell_quote(&script.to_string_lossy()),
+    );
+    std::fs::write(&command_file, body).map_err(|e| e.to_string())?;
+    std::fs::set_permissions(&command_file, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+    std::process::Command::new("open")
+        .args(["-a", "Terminal"])
+        .arg(&command_file)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Single-quote for a POSIX shell: 'it'\''s'.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::shell_quote;
+
+    #[test]
+    fn shell_quote_survives_quotes_and_spaces() {
+        assert_eq!(shell_quote("/Applications/Koe.app/x y"), "'/Applications/Koe.app/x y'");
+        assert_eq!(shell_quote("it's"), r"'it'\''s'");
+    }
+}
