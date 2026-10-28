@@ -206,12 +206,27 @@ fn open_url(url: &str) {
     let _ = std::process::Command::new("open").arg(url).spawn();
 }
 
+/// Clear Koe's own entry for a privacy `service` so the next request starts
+/// fresh. Every Koe build is a new app to macOS, and after an update System
+/// Settings can keep showing the previous build's approval switched on even
+/// though it no longer applies, with no way to fix it from the switch alone.
+/// Only called when the permission is currently missing, so a working grant is
+/// never touched.
+#[cfg(target_os = "macos")]
+fn reset_stale_grant(app: &tauri::AppHandle, service: &str) {
+    let id = &app.config().identifier;
+    let _ = std::process::Command::new("/usr/bin/tccutil").args(["reset", service, id]).status();
+}
+
 /// Request microphone access with AVFoundation so macOS registers this bundle in
 /// Privacy & Security, then open the Microphone settings pane.
 #[tauri::command]
-fn request_microphone() {
+fn request_microphone(app: tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     {
+        if !permissions::snapshot().microphone {
+            reset_stale_grant(&app, "Microphone");
+        }
         paste::request_microphone_access();
         open_url("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
     }
@@ -220,9 +235,12 @@ fn request_microphone() {
 /// Request Accessibility — the permission that makes the Fn key work in every app and
 /// lets us type into other apps. Fire the native prompt, then open the pane.
 #[tauri::command]
-fn request_accessibility() {
+fn request_accessibility(app: tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     {
+        if !paste::is_trusted() {
+            reset_stale_grant(&app, "Accessibility");
+        }
         let _ = paste::prompt_accessibility();
         open_url("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
     }
@@ -231,9 +249,12 @@ fn request_accessibility() {
 /// Request Input Monitoring (needed for the Fn key to be seen in every app, not
 /// just while Koe is frontmost): register + prompt, then open the pane.
 #[tauri::command]
-fn request_input_monitoring() {
+fn request_input_monitoring(app: tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     {
+        if !paste::input_monitoring_granted() {
+            reset_stale_grant(&app, "ListenEvent");
+        }
         let _ = paste::request_input_monitoring();
         open_url("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent");
     }

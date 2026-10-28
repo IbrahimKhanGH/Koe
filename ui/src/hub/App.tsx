@@ -19,6 +19,7 @@ import {
   getLastError,
   onPermissions,
   requestAccessibility,
+  requestMicrophone,
   type Settings,
   type Status,
   type LastError,
@@ -82,17 +83,13 @@ function ErrorBanner({
 export function App() {
   const [page, setPage] = useState<Page>("home");
   const [settings, setLocalSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [entered, setEntered] = useState(() => {
-    try { return localStorage.getItem("koe_onboarding_done") === "1"; } catch { return false; }
-  });
   const [status, setStatus] = useState<Status>(UNKNOWN_STATUS);
+  // Set once macOS has answered, so the setup screen never flashes on launch.
+  const [statusKnown, setStatusKnown] = useState(false);
+  // "Skip for now" on the setup screen, for this session only.
+  const [skipped, setSkipped] = useState(false);
   const [lastError, setLastError] = useState<LastError | null>(null);
   const [errorDismissed, setErrorDismissed] = useState(false);
-
-  const markEntered = () => {
-    try { localStorage.setItem("koe_onboarding_done", "1"); } catch { /* ignore */ }
-    setEntered(true);
-  };
 
   // Stable across renders. It used to be rebuilt on every render, which tore
   // down and restarted any interval keyed on it — a poll that resets its own
@@ -101,9 +98,7 @@ export function App() {
     () =>
       getStatus().then((s) => {
         setStatus(s);
-        // Auto-enter if both required permissions are already granted so the user
-        // never sees the Onboarding gate on a re-open after a successful setup.
-        if (s.accessibility && s.microphone) markEntered();
+        setStatusKnown(true);
       }),
     [],
   );
@@ -128,11 +123,8 @@ export function App() {
     let stop: (() => void) | undefined;
     let gone = false;
     void onPermissions((p) => {
-      setStatus((prev) => {
-        const next = { ...prev, ...p };
-        if (next.accessibility && next.microphone) markEntered();
-        return next;
-      });
+      setStatus((prev) => ({ ...prev, ...p }));
+      setStatusKnown(true);
     }).then((u) => (gone ? u() : (stop = u)));
     return () => {
       gone = true;
@@ -152,11 +144,9 @@ export function App() {
     };
   }, []);
 
-  // Backstop poll for the whole session, not just during onboarding — a
-  // permission can lapse after `entered` is already true (a rebuild with a new
-  // ad-hoc signature invalidates a prior macOS Accessibility grant; see the
-  // "stale TCC entry" case in hotkey.rs), and that used to go completely
-  // unnoticed until the user dug through logs.
+  // Backstop poll for the whole session — a permission can lapse while Koe is
+  // running, and every update is a new app to macOS whose earlier grants no
+  // longer apply (see the "stale TCC entry" case in hotkey.rs).
   useEffect(() => {
     const id = setInterval(() => void refreshRef.current(), 5000);
     return () => clearInterval(id);
@@ -183,28 +173,42 @@ export function App() {
     void setSettings(s);
   };
 
-  // Gate the app behind the setup wizard until the required permissions are granted.
-  if (!(status.accessibility && status.microphone) && !entered) {
-    return <Onboarding status={status} refresh={refresh} onEnter={markEntered} />;
+  // Until macOS has answered, show just the page colour: no flash of either the
+  // setup screen or the app.
+  if (!statusKnown) {
+    return <div style={{ height: "100vh", background: theme.pageBg }} />;
   }
 
-  // Two independent reasons for the post-onboarding banner: Accessibility
-  // lapsed after entry (checked live against `status`, not just the one-time
-  // onboarding gate), or the pipeline reported some other failure (hotkey tap
+  // The setup screen comes back whenever a required permission is missing — on
+  // first launch, and after every update, since each new build is a new app to
+  // macOS — unless skipped for this session.
+  const ready = status.accessibility && status.microphone;
+  if (!ready && !skipped) {
+    return <Onboarding status={status} refresh={refresh} onSkip={() => setSkipped(true)} />;
+  }
+
+  // Two independent reasons for the banner: a permission is missing after
+  // "Skip for now", or the pipeline reported some other failure (hotkey tap
   // dead, paste failed, empty transcript, …).
-  const accessibilityLapsed = entered && !status.accessibility;
   const banner = errorDismissed
     ? null
-    : accessibilityLapsed
+    : !status.accessibility
       ? {
           headline: "Accessibility permission needed",
-          detail: "Koe can no longer type into other apps — grant it again to keep dictating.",
+          detail: "Koe can't type into other apps until it's on.",
           actionLabel: "Grant Accessibility",
           onAction: () => requestAccessibility(),
         }
-      : lastError
-        ? { headline: lastError.headline, detail: lastError.detail }
-        : null;
+      : !status.microphone
+        ? {
+            headline: "Microphone permission needed",
+            detail: "Koe can't hear you until it's on.",
+            actionLabel: "Grant Microphone",
+            onAction: () => requestMicrophone(),
+          }
+        : lastError
+          ? { headline: lastError.headline, detail: lastError.detail }
+          : null;
 
   return (
     <div

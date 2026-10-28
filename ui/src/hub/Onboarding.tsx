@@ -68,11 +68,11 @@ function Step({
 export function Onboarding({
   status,
   refresh,
-  onEnter,
+  onSkip,
 }: {
   status: Status;
   refresh: () => void;
-  onEnter: () => void;
+  onSkip: () => void;
 }) {
   // A backstop poll. The state actually flips on the heartbeat Rust pushes at
   // us (`permissions::watch` → `koe://permissions`), because this webview
@@ -92,7 +92,6 @@ export function Onboarding({
   const acc = status.accessibility;
   const mic = status.microphone;
   const inp = status.input_monitoring;
-  const canEnter = acc && mic;
 
   return (
     <div style={{ height: "100vh", display: "grid", gridTemplateColumns: "minmax(280px, 0.85fr) minmax(0, 1.15fr)", background: theme.pageBg }}>
@@ -150,7 +149,9 @@ export function Onboarding({
             then just talk.
           </h1>
           <p style={{ color: theme.textMuted, fontSize: 13.5, lineHeight: 1.6, margin: "0 0 26px" }}>
-            Grant these in order. Each one marks itself done the moment macOS applies it — no relaunch.
+            Grant these in order. Each one marks itself done the moment macOS applies it — no relaunch. Just
+            updated? macOS treats every new version of Koe as a new app, so it asks again; Grant clears the old
+            entry first.
           </p>
 
           <Step
@@ -189,15 +190,26 @@ export function Onboarding({
             />
           </div>
 
-          <div style={{ marginTop: 26 }}>
-            <Button variant="ink" onClick={onEnter} disabled={!canEnter}>
-              {canEnter ? "Start using Koe  →" : "Grant Accessibility and Microphone to continue"}
-            </Button>
-          </div>
-
-          <p style={{ fontSize: 12, color: theme.textFaint, lineHeight: 1.55, marginTop: 18 }}>
-            If a step stays unchecked after you switch it on in System Settings, switch Koe off and on again there.
+          <p style={{ fontSize: 12, color: theme.textFaint, lineHeight: 1.55, marginTop: 22 }}>
+            Koe opens by itself once Accessibility and Microphone are on. If a step stays unchecked after you switch it
+            on in System Settings, click its Grant button again.
           </p>
+          <button
+            onClick={onSkip}
+            style={{
+              marginTop: 10,
+              padding: 0,
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              fontSize: 12,
+              color: theme.textMuted,
+              textDecoration: "underline",
+              textUnderlineOffset: 3,
+            }}
+          >
+            Skip for now
+          </button>
         </div>
       </div>
     </div>
