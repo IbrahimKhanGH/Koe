@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { font, palette } from "../tokens/values";
 import { theme } from "./theme";
 import { Button, Card, Eyebrow, PageTitle } from "./ui";
-import { downloadModels, getModels, restartApp, type ModelInfo, type ModelKind, type ModelsReport, type Settings, type Tier } from "./api";
+import { downloadModels, getModels, openModelCard, restartApp, type ModelInfo, type ModelKind, type ModelsReport, type Settings, type Tier } from "./api";
 
 const TIERS: { key: Tier; name: string; blurb: string }[] = [
   { key: "compact", name: "Compact", blurb: "Speech only. Pastes what you said, with punctuation; no rewriting." },
   { key: "balanced", name: "Balanced", blurb: "Best accuracy for the size. The default." },
-  { key: "max", name: "Max", blurb: "Strongest cleanup and rewriting. Needs 32 GB of memory or more." },
+  { key: "max", name: "Max", blurb: "Strongest rewriting, but keeps ~20 GB of memory in use while Koe runs. Best with 48 GB+." },
 ];
 
 const KINDS: { kind: ModelKind; setting: "speech_model" | "cleanup_model"; title: string; desc: string }[] = [
@@ -24,6 +24,73 @@ const KINDS: { kind: ModelKind; setting: "speech_model" | "cleanup_model"; title
     desc: "Removes fillers, applies your self-corrections, and fixes punctuation and lists before pasting.",
   },
 ];
+
+// What every model here is, before any of the choices.
+const PROMISES: { title: string; body: string }[] = [
+  { title: "Local", body: "Runs on this Mac's own chip. Nothing you say is sent anywhere." },
+  { title: "Official", body: "Straight from the makers: OpenAI's Whisper and Alibaba's Qwen." },
+  { title: "Openly licensed", body: "MIT and Apache 2.0: free to use at work, commercially too." },
+  { title: "Verified", body: "Pinned to an exact file; its fingerprint is checked before every load." },
+];
+
+function Promises() {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+        borderTop: `1px solid ${theme.textStrong}`,
+        borderBottom: `1px solid ${theme.rule}`,
+        marginBottom: 30,
+      }}
+    >
+      {PROMISES.map((p, i) => (
+        <div
+          key={p.title}
+          style={{
+            padding: i === 0 ? "16px 18px 18px 0" : "16px 18px 18px",
+            borderLeft: i === 0 ? "none" : `1px solid ${theme.rule}`,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 7, height: 7, background: palette.chartreuse, outline: "1px solid rgba(18,18,17,0.25)" }} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: theme.textStrong }}>{p.title}</span>
+          </div>
+          <div style={{ fontSize: 12.5, color: theme.textMuted, lineHeight: 1.5, marginTop: 6 }}>{p.body}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// "OpenAI · MIT license · Model card ↗": who made it, under what terms, and a
+// link to the maker's own page (opened in the browser, not by Koe).
+function Provenance({ m }: { m: ModelInfo }) {
+  return (
+    <span style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "4px 10px", marginTop: 7 }}>
+      <Eyebrow color={theme.textMuted}>{m.maker}</Eyebrow>
+      <Eyebrow color={theme.textMuted}>· {m.license} license</Eyebrow>
+      <span
+        role="link"
+        tabIndex={0}
+        title={`Published by ${m.published_by}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          void openModelCard(m.file);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.stopPropagation();
+            void openModelCard(m.file);
+          }
+        }}
+        style={{ cursor: "pointer" }}
+      >
+        <Eyebrow color={palette.red}>· Model card ↗</Eyebrow>
+      </span>
+    </span>
+  );
+}
 
 function gb(bytes: number): string {
   const v = bytes / 1e9;
@@ -213,6 +280,7 @@ function KindSection({
                 </span>
               </span>
               <span style={{ display: "block", fontSize: 12.5, color: theme.textMuted, marginTop: 3 }}>{m.note}</span>
+              <Provenance m={m} />
               {!m.installed && (
                 <span style={{ display: "block", marginTop: 10 }}>
                   <Download target={m.file} label={`Download ${gb(m.size)}`} />
@@ -261,10 +329,12 @@ export function ModelsPane({ settings, onChange }: { settings: Settings; onChang
       <PageTitle
         index={3}
         eyebrow="Models"
-        sub="Two models do the work, both on this Mac. Each is checked against a pinned fingerprint before it loads."
+        sub="Two models do the work, both on this Mac: one turns your voice into text, one tidies it."
       >
         What runs here
       </PageTitle>
+
+      <Promises />
 
       {pending.length > 0 && (
         <div

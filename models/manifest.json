@@ -1,14 +1,18 @@
 {
-  "_about": "The only model files Koe will load. Each is pinned to an exact Hugging Face commit and SHA-256 (the Git LFS id Hugging Face publishes); the app refuses any file whose hash does not match, and scripts/get-models.sh downloads from these URLs and checks the same hashes. Within a kind, entries are in quality order: with no model chosen in the app, the first installed one that verifies is used. `tiers` says which `get-models.sh --tier` installs each file; `hybrid` marks Qwen3 models that think before answering unless told not to.",
+  "_about": "The only model files Koe will load: official, openly licensed models from their makers (`maker`, `license`, `card` = the maker's model page; `published_by` = who published this exact converted file). Each is pinned to an exact Hugging Face commit and SHA-256 (the Git LFS id Hugging Face publishes); the app refuses any file whose hash does not match, and scripts/get-models.sh downloads from these URLs and checks the same hashes. Within a kind, entries are in quality order: with no model chosen in the app, the first installed one that verifies is used. `tiers` says which `get-models.sh --tier` installs each file; `hybrid` marks Qwen3 models that think before answering unless told not to.",
   "tiers": {
     "compact": "Speech only (0.5 GB): pastes what you said, with punctuation. No cleanup model.",
     "balanced": "Best accuracy for the size. The default.",
-    "max": "Strongest cleanup. Needs 32 GB of memory or more."
+    "max": "Strongest cleanup, but keeps ~20 GB of memory in use while Koe runs. Best on Macs with 48 GB or more; needs at least 32 GB."
   },
   "models": [
     {
       "kind": "whisper",
       "file": "ggml-large-v3-turbo.bin",
+      "maker": "OpenAI",
+      "license": "MIT",
+      "card": "https://huggingface.co/openai/whisper-large-v3-turbo",
+      "published_by": "whisper.cpp's author (ggerganov)",
       "label": "Whisper large-v3 turbo",
       "note": "Most accurate, especially on names and jargon.",
       "size": 1624555275,
@@ -20,6 +24,10 @@
     {
       "kind": "whisper",
       "file": "ggml-small.en.bin",
+      "maker": "OpenAI",
+      "license": "Apache 2.0",
+      "card": "https://huggingface.co/openai/whisper-small.en",
+      "published_by": "whisper.cpp's author (ggerganov)",
       "label": "Whisper small (English)",
       "note": "A third of the size; a little less accurate.",
       "size": 487614201,
@@ -31,6 +39,10 @@
     {
       "kind": "whisper",
       "file": "ggml-base.en.bin",
+      "maker": "OpenAI",
+      "license": "Apache 2.0",
+      "card": "https://huggingface.co/openai/whisper-base.en",
+      "published_by": "whisper.cpp's author (ggerganov)",
       "label": "Whisper base (English)",
       "note": "Smallest and fastest to load; noticeably less accurate.",
       "size": 147964211,
@@ -42,6 +54,10 @@
     {
       "kind": "cleanup",
       "file": "Qwen3-30B-A3B-Q4_K_M.gguf",
+      "maker": "Qwen team, Alibaba Cloud",
+      "license": "Apache 2.0",
+      "card": "https://huggingface.co/Qwen/Qwen3-30B-A3B",
+      "published_by": "the Qwen team",
       "label": "Qwen3 30B-A3B",
       "note": "Mixture-of-experts: 30B parameters, about 3B active per word, so it stays quick.",
       "size": 18556685824,
@@ -54,6 +70,10 @@
     {
       "kind": "cleanup",
       "file": "qwen3-4b-instruct-2507-q8_0.gguf",
+      "maker": "Qwen team, Alibaba Cloud",
+      "license": "Apache 2.0",
+      "card": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507",
+      "published_by": "llama.cpp's maintainers (ggml-org)",
       "label": "Qwen3 4B Instruct",
       "note": "Handles self-corrections, lists, and tone well.",
       "size": 4280403520,

@@ -25,6 +25,12 @@ pub enum ModelKind {
 pub struct ModelSpec {
     pub kind: ModelKind,
     pub file: String,
+    /// Who made the model, its license, and the maker's official model page.
+    pub maker: String,
+    pub license: String,
+    pub card: String,
+    /// Who published this exact (converted) file.
+    pub published_by: String,
     pub label: String,
     pub note: String,
     pub size: u64,
@@ -161,6 +167,10 @@ mod tests {
         ModelSpec {
             kind: ModelKind::Whisper,
             file: file.into(),
+            maker: String::new(),
+            license: String::new(),
+            card: String::new(),
+            published_by: String::new(),
             label: file.into(),
             note: String::new(),
             size: contents.len() as u64,
@@ -193,6 +203,11 @@ mod tests {
             let commit = rest.split("/resolve/").nth(1).and_then(|r| r.split('/').next());
             assert!(commit.is_some_and(|c| c.len() == 40), "{} is not commit-pinned", m.file);
             assert!(m.url.ends_with(&m.file), "{}", m.file);
+            // Official and usable at work: a named maker, a permissive license,
+            // and a model card on the maker's own Hugging Face page.
+            assert!(!m.maker.is_empty() && !m.published_by.is_empty(), "{}", m.file);
+            assert!(["MIT", "Apache 2.0"].contains(&m.license.as_str()), "{} license {}", m.file, m.license);
+            assert!(m.card.starts_with("https://huggingface.co/"), "{}", m.file);
         }
     }
 

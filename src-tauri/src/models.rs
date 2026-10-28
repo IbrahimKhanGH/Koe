@@ -136,6 +136,18 @@ pub fn open_download(app: &tauri::AppHandle, target: &str) -> Result<(), String>
         .map_err(|e| e.to_string())
 }
 
+/// Open a model's official page (its "card", from the manifest) in the browser.
+/// Only manifest URLs are ever opened, and the browser does the fetching — Koe
+/// itself still makes no connection.
+pub fn open_card(file: &str) -> Result<(), String> {
+    let card = koe_core::models::manifest()
+        .into_iter()
+        .find(|m| m.file == file)
+        .map(|m| m.card)
+        .ok_or_else(|| format!("not a known model: {file}"))?;
+    std::process::Command::new("open").arg(card).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 /// Single-quote for a POSIX shell: 'it'\''s'.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn shell_quote(s: &str) -> String {

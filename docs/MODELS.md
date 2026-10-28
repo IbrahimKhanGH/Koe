@@ -1,10 +1,24 @@
 # Models
 
-Koe uses two kinds of open model, both running entirely on your Mac:
+Koe uses two kinds of model. Both are **official releases from their makers under
+open licenses that allow use at work (including commercially)**, and both run
+entirely on your Mac:
 
-- **Speech** (Whisper, by OpenAI, MIT license) turns your voice into text.
-- **Cleanup** (Qwen3, by Alibaba's Qwen team, Apache 2.0) removes fillers, applies
-  your spoken self-corrections ("at 3, no wait, 4" → "at 4"), and formats lists.
+- **Speech:** Whisper, by OpenAI, turns your voice into text.
+- **Cleanup:** Qwen3, by Alibaba Cloud's Qwen team, removes fillers, applies your
+  spoken self-corrections ("at 3, no wait, 4" → "at 4"), and formats lists.
+
+| File | Made by | License | This file published by | Model card |
+|---|---|---|---|---|
+| Whisper large-v3 turbo | OpenAI | MIT | whisper.cpp's author | [openai/whisper-large-v3-turbo](https://huggingface.co/openai/whisper-large-v3-turbo) |
+| Whisper small (English) | OpenAI | Apache 2.0 | whisper.cpp's author | [openai/whisper-small.en](https://huggingface.co/openai/whisper-small.en) |
+| Whisper base (English) | OpenAI | Apache 2.0 | whisper.cpp's author | [openai/whisper-base.en](https://huggingface.co/openai/whisper-base.en) |
+| Qwen3 4B Instruct | Qwen team, Alibaba Cloud | Apache 2.0 | llama.cpp's maintainers | [Qwen/Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) |
+| Qwen3 30B-A3B | Qwen team, Alibaba Cloud | Apache 2.0 | the Qwen team | [Qwen/Qwen3-30B-A3B](https://huggingface.co/Qwen/Qwen3-30B-A3B) |
+
+The Models page in Koe shows the same details, with a link to each model card. A test
+(`cargo test -p koe-core models`) fails if any model lacks a maker, an MIT/Apache 2.0
+license, or an official model page.
 
 ## Tiers
 
@@ -12,7 +26,7 @@ Koe uses two kinds of open model, both running entirely on your Mac:
 |---|---|---|---|---|
 | **Compact** | Whisper small | none | 0.5 GB | ~1 GB |
 | **Balanced** (default) | Whisper large-v3 turbo | Qwen3 4B Instruct (Q8) | 5.9 GB | ~7 GB |
-| **Max** | Whisper large-v3 turbo | Qwen3 30B-A3B (Q4) | 20.2 GB | ~22 GB, needs a 32 GB+ Mac |
+| **Max** | Whisper large-v3 turbo | Qwen3 30B-A3B (Q4) | 20.2 GB | ~22 GB the whole time Koe runs; best with 48 GB+, needs 32 GB |
 
 - **Compact** pastes what you said with Whisper's punctuation and capitals, but doesn't
   rewrite. Smaller cleanup models were tested and rejected: Qwen3 1.7B left "uh"/"um"

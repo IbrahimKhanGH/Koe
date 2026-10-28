@@ -184,6 +184,12 @@ fn download_models(app: tauri::AppHandle, target: String) -> Result<(), String> 
     models::open_download(&app, &target)
 }
 
+/// Open a model's official page in the browser.
+#[tauri::command]
+fn open_model_card(file: String) -> Result<(), String> {
+    models::open_card(&file)
+}
+
 /// Relaunch Koe, so a newly chosen model is loaded.
 #[tauri::command]
 fn restart_app(app: tauri::AppHandle) {
@@ -307,6 +313,7 @@ pub fn run() {
             set_hands_free_hotkey,
             get_models,
             download_models,
+            open_model_card,
             restart_app
         ])
         .setup(|app| {

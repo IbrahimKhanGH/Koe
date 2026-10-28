@@ -91,12 +91,13 @@ const FACTS: { title: string; body: ReactNode }[] = [
     ),
   },
   {
-    title: "Verified models",
+    title: "Official, licensed models",
     body: (
       <>
-        Each model is pinned to an exact file from its maker's official page. Koe checks the file's SHA-256
-        fingerprint before every load and refuses anything that doesn't match. Downloads happen in a Terminal window
-        you can watch, never inside Koe.
+        Speech is OpenAI's Whisper (MIT and Apache 2.0 licenses); cleanup is Alibaba's Qwen (Apache 2.0). Both are
+        official releases under open licenses that allow use at work. Each is pinned to an exact file, and Koe checks
+        its SHA-256 fingerprint before every load, refusing anything that doesn't match. Downloads happen in a Terminal
+        window you can watch, never inside Koe.
       </>
     ),
   },
@@ -183,7 +184,12 @@ export function PrivacyPane() {
               loaded.map((m) => (
                 <div key={m.file} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
                   <span style={{ width: 7, height: 7, background: palette.chartreuse, outline: "1px solid rgba(18,18,17,0.25)" }} />
-                  <span style={{ flex: 1, fontSize: 13, color: theme.textStrong }}>{m.label}</span>
+                  <span style={{ flex: 1, fontSize: 13, color: theme.textStrong }}>
+                    {m.label}
+                    <span style={{ display: "block", fontSize: 11.5, color: theme.textFaint }}>
+                      {m.maker} · {m.license}
+                    </span>
+                  </span>
                   <Eyebrow color={theme.textMuted}>SHA-256 verified</Eyebrow>
                 </div>
               ))

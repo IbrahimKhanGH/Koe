@@ -253,6 +253,10 @@ export type Tier = "compact" | "balanced" | "max";
 export interface ModelInfo {
   kind: ModelKind;
   file: string;
+  maker: string;
+  license: string;
+  card: string;
+  published_by: string;
   label: string;
   note: string;
   size: number;
@@ -285,6 +289,15 @@ export async function downloadModels(target: string): Promise<string | null> {
     return null;
   } catch (e) {
     return typeof e === "string" ? e : null;
+  }
+}
+
+/** Open a model's official page (from the manifest) in the browser. */
+export async function openModelCard(file: string): Promise<void> {
+  try {
+    await invoke<void>("open_model_card", { file });
+  } catch {
+    /* browser preview */
   }
 }
 
