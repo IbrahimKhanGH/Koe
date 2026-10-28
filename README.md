@@ -10,11 +10,31 @@ fillers ("um", "like"), resolves self-corrections ("2pm, no wait, 3pm" → "3pm"
 and fixes punctuation and lists. **There is no cloud mode, no account, no
 telemetry, and no network code in the app.**
 
+## Install
+
+Paste into Terminal on an Apple Silicon Mac (macOS 14+). No security warning, and
+run it again any time to update:
+
+```bash
+curl -fsSL https://github.com/IbrahimKhanGH/Koe/releases/latest/download/install.sh | bash
+```
+
+Or download the dmg from [the latest release](https://github.com/IbrahimKhanGH/Koe/releases/latest)
+and follow **Read Me First** inside it (macOS asks you to approve it once under
+System Settings → Privacy & Security → Open Anyway). The install command works
+only while this repo is public.
+
 ## Sharing it with coworkers
 
 ```bash
-scripts/build-local.sh --dmg     # → target/release/bundle/dmg/Koe-<version>.dmg (~5 MB)
+scripts/release.sh               # build, package, and publish as the latest release
+scripts/build-local.sh --dmg     # or just build target/release/bundle/dmg/Koe-<version>.dmg
 ```
+
+`release.sh` uploads the dmg, a zip, and an `install.sh` that pins the zip's
+SHA-256, so the install command above always installs the newest release and
+refuses a download that doesn't match. Bump the version in
+`src-tauri/tauri.conf.json` and `Cargo.toml` before publishing an update.
 
 Send the dmg (Slack, Drive, AirDrop). It holds Koe, an Applications shortcut, and
 **Read Me First**, which walks through the one-time *Open Anyway* approval (Koe isn't
