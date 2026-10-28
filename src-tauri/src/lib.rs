@@ -7,6 +7,7 @@ mod appctx;
 mod diag;
 mod hotkey;
 mod local_llm;
+mod models;
 mod paste;
 mod permissions;
 #[cfg(target_os = "windows")]
@@ -171,6 +172,18 @@ fn get_status() -> StatusReport {
 /// lets the Hub show what went wrong even if it was opened after the fact.
 /// See `diag::report`, called from the dictation pipeline whenever text
 /// fails to reach the cursor.
+/// Every allowed model, with what's installed and what's loaded, for the Models page.
+#[tauri::command]
+fn get_models() -> models::ModelsReport {
+    models::report()
+}
+
+/// Relaunch Koe, so a newly chosen model is loaded.
+#[tauri::command]
+fn restart_app(app: tauri::AppHandle) {
+    app.restart();
+}
+
 #[tauri::command]
 fn get_last_error() -> Option<diag::ErrorDto> {
     diag::last_error()
@@ -285,7 +298,9 @@ pub fn run() {
             request_microphone,
             request_accessibility,
             request_input_monitoring,
-            set_hands_free_hotkey
+            set_hands_free_hotkey,
+            get_models,
+            restart_app
         ])
         .setup(|app| {
             // Regular app: shows in the Dock with a normal, focusable main window.

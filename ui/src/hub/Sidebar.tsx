@@ -3,11 +3,12 @@ import { theme } from "./theme";
 import { Wordmark } from "./motifs";
 import { Eyebrow } from "./ui";
 
-export type Page = "home" | "dictionary" | "settings" | "help";
+export type Page = "home" | "dictionary" | "models" | "settings" | "help";
 
 export const PAGES: { key: Page; label: string }[] = [
   { key: "home", label: "Home" },
   { key: "dictionary", label: "Dictionary" },
+  { key: "models", label: "Models" },
   { key: "settings", label: "Settings" },
   { key: "help", label: "Help" },
 ];

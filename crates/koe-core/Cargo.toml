@@ -16,5 +16,7 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 strsim = "0.11"
-# SHA-256 of model files before they are loaded (see models.rs).
-sha2 = "0.10"
+# SHA-256 of model files before they are loaded (see models.rs). "asm" turns on
+# the Apple Silicon SHA-2 instructions: ~5x faster, which matters when every
+# launch hashes several GB of models.
+sha2 = { version = "0.10", features = ["asm"] }

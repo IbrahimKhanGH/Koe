@@ -4,7 +4,10 @@
 //! `{"system": "...", "user": "..."}` → `{"text": "..."}` on stdout. The Koe
 //! app spawns this and keeps it warm so cleanup is fast and fully offline.
 //!
-//! Usage: `koe-llm-worker <model.gguf>` (or KOE_LLM_MODEL env var).
+//! Usage: `koe-llm-worker <model.gguf> [--no-think]` (or KOE_LLM_MODEL env var).
+//! `--no-think` is for hybrid Qwen3 models, which otherwise reason in a
+//! `<think>` block before answering: it pre-fills an empty one, the same thing
+//! Qwen3's own chat template does when thinking is disabled.
 
 use std::io::{BufRead, Write};
 use std::num::NonZeroU32;
@@ -53,6 +56,7 @@ fn main() -> anyhow::Result<()> {
         .nth(1)
         .or_else(|| std::env::var("KOE_LLM_MODEL").ok())
         .context("model path required (argv[1] or KOE_LLM_MODEL)")?;
+    let no_think = std::env::args().skip(2).any(|a| a == "--no-think");
 
     let backend = LlamaBackend::init()?;
     // Offload everything to the Apple GPU (Metal) — capped by what fits.
@@ -69,7 +73,7 @@ fn main() -> anyhow::Result<()> {
             continue;
         }
         let resp = match serde_json::from_str::<Request>(&line) {
-            Ok(req) => match generate(&backend, &model, &req) {
+            Ok(req) => match generate(&backend, &model, &req, no_think) {
                 Ok(text) => Response { text, error: None },
                 Err(e) => Response {
                     text: String::new(),
@@ -88,8 +92,8 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn generate(backend: &LlamaBackend, model: &LlamaModel, req: &Request) -> anyhow::Result<String> {
-    // Qwen2.5 ChatML template. Prefer the full multi-turn message list (few-shot
+fn generate(backend: &LlamaBackend, model: &LlamaModel, req: &Request, no_think: bool) -> anyhow::Result<String> {
+    // Qwen ChatML template. Prefer the full multi-turn message list (few-shot
     // demonstrations drive the newline/list/self-correction behavior); fall back
     // to the legacy single system+user pair.
     let mut prompt = String::new();
@@ -104,6 +108,9 @@ fn generate(backend: &LlamaBackend, model: &LlamaModel, req: &Request) -> anyhow
         }
     }
     prompt.push_str("<|im_start|>assistant\n");
+    if no_think {
+        prompt.push_str("<think>\n\n</think>\n\n");
+    }
 
     let ctx_params = LlamaContextParams::default().with_n_ctx(NonZeroU32::new(4096));
     let mut ctx = model.new_context(backend, ctx_params)?;
@@ -135,5 +142,34 @@ fn generate(backend: &LlamaBackend, model: &LlamaModel, req: &Request) -> anyhow
         n_cur += 1;
         ctx.decode(&mut batch)?;
     }
-    Ok(out.trim().to_string())
+    Ok(strip_think(&out).trim().to_string())
+}
+
+/// Drop a `<think>…</think>` block if a model emitted one anyway, so reasoning
+/// text can never be pasted in place of the answer. A block the output budget
+/// cut off before it closed leaves no answer at all: empty, so the app falls back
+/// to the raw transcript.
+fn strip_think(text: &str) -> &str {
+    if !text.trim_start().starts_with("<think>") {
+        return text;
+    }
+    match text.find("</think>") {
+        Some(end) => &text[end + "</think>".len()..],
+        None => "",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_think;
+
+    #[test]
+    fn strips_a_leading_think_block_only() {
+        assert_eq!(strip_think("<think>\nhmm\n</think>\n\nHello."), "\n\nHello.");
+        // Cut off mid-thought: no answer, never the reasoning.
+        assert_eq!(strip_think("<think>\nOkay, the user wants"), "");
+        assert_eq!(strip_think("Hello."), "Hello.");
+        // A literal tag mid-answer is the user's text, not reasoning.
+        assert_eq!(strip_think("Use <think> and </think> tags."), "Use <think> and </think> tags.");
+    }
 }

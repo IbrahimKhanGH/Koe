@@ -32,6 +32,16 @@ const TOPICS: { title: string; body: ReactNode }[] = [
     ),
   },
   {
+    title: "Models",
+    body: (
+      <>
+        Choose a tier on the Models page: Compact (0.5 GB, speech only), Balanced (5.9 GB, the default), or Max
+        (20 GB, for Macs with 32 GB of memory or more). Koe never downloads anything itself — the page gives you the one
+        command to run.
+      </>
+    ),
+  },
+  {
     title: "Your words",
     body: (
       <>
@@ -65,7 +75,7 @@ const TOPICS: { title: string; body: ReactNode }[] = [
 export function Help() {
   return (
     <div style={{ maxWidth: 820 }}>
-      <PageTitle index={4} eyebrow="Help" sub="Everything Koe does, on one page.">
+      <PageTitle index={5} eyebrow="Help" sub="Everything Koe does, on one page.">
         How it works
       </PageTitle>
       <ol style={{ listStyle: "none", padding: 0, margin: 0 }}>

@@ -1,65 +1,83 @@
 # Models
 
-Koe runs two open models entirely on your Mac:
+Koe uses two kinds of open model, both running entirely on your Mac:
 
-| Model | Job | Default file | Size | License |
+- **Speech** (Whisper, by OpenAI, MIT license) turns your voice into text.
+- **Cleanup** (Qwen3, by Alibaba's Qwen team, Apache 2.0) removes fillers, applies
+  your spoken self-corrections ("at 3, no wait, 4" → "at 4"), and formats lists.
+
+## Tiers
+
+| Tier | Speech | Cleanup | Download | Memory |
 |---|---|---|---|---|
-| **Whisper large-v3-turbo** (OpenAI) | Speech → text | `ggml-large-v3-turbo.bin` | 1.6 GB | MIT |
-| **Qwen3-4B-Instruct-2507**, Q8_0 (Alibaba) | Cleans up the text | `qwen3-4b-instruct-2507-q8_0.gguf` | 4.3 GB | Apache 2.0 |
+| **Compact** | Whisper small | none | 0.5 GB | ~1 GB |
+| **Balanced** (default) | Whisper large-v3 turbo | Qwen3 4B Instruct (Q8) | 5.9 GB | ~7 GB |
+| **Max** | Whisper large-v3 turbo | Qwen3 30B-A3B (Q4) | 20.2 GB | ~22 GB, needs a 32 GB+ Mac |
 
-Together they use about 6 GB of memory and run on the GPU (Metal).
+- **Compact** pastes what you said with Whisper's punctuation and capitals, but doesn't
+  rewrite. Smaller cleanup models were tested and rejected: Qwen3 1.7B left "uh"/"um"
+  in and ignored self-corrections, and Qwen2.5 1.5B sometimes replied with unrelated text.
+- **Balanced** handled every test (fillers, self-corrections, spoken lists) and takes
+  about 3.5 s per cleanup on an M1 Pro, less on newer chips.
+- **Max**'s cleanup model is a mixture-of-experts: 30B parameters, of which about 3B do
+  the work for each word, so it should run at a speed similar to the 4B with stronger
+  rewriting. It hasn't been tested yet; try it on a 32 GB+ Mac before recommending it.
 
-## Installing them
+## Installing
 
 ```bash
-scripts/get-models.sh
+scripts/get-models.sh                  # Balanced
+scripts/get-models.sh --tier compact   # or max
+scripts/get-models.sh --list           # every tier and file, with sizes
 ```
 
-That downloads both into `~/Library/Application Support/Koe/models/`
-and checks each one's SHA-256 before installing it. Re-running it is safe:
-files already installed and verified are skipped. Other options:
+Files go to `~/Library/Application Support/Koe/models/`. Tiers can live side by side;
+re-running is safe, since files already installed and verified are skipped. To install
+files someone already downloaded (for example, handed out by IT), with no network at all:
 
 ```bash
-scripts/get-models.sh ggml-base.en.bin       # a specific file from the manifest
-scripts/get-models.sh --all                  # every file in the manifest
-scripts/get-models.sh --from /path/to/files  # install from a folder of files someone
-                                             # already downloaded; no network at all
+scripts/get-models.sh --from /path/to/folder --tier balanced
 ```
 
-Smaller Whisper models (`ggml-medium.en.bin`, `ggml-small.en.bin`,
-`ggml-base.en.bin`) are listed too, for slower machines. If several are
-installed, the app uses the most accurate one that verifies.
+**Choosing in the app:** the **Models** page shows every model, what's installed, and
+what's loaded. Pick one per kind, or leave it on *Automatic* (the best one installed),
+then restart Koe when it asks.
+
+**Why the app can't download models itself:** Koe contains no network code at all,
+which `scripts/check-offline.sh` enforces on every build. That's the guarantee nothing
+you say can leave the Mac. The script is the only thing that ever touches the network,
+and it only downloads.
 
 ## How verification works
 
-[`models/manifest.json`](../models/manifest.json) is the allow-list. For every
-file it pins:
+[`models/manifest.json`](../models/manifest.json) is the allow-list. For every file it
+pins:
 
-- the **download URL**, at an exact Hugging Face commit (not a branch that can
-  change), from the official publishers: `ggerganov/whisper.cpp` (the
-  whisper.cpp author) and `ggml-org` (the llama.cpp maintainers);
-- the **size** and **SHA-256**, which are the Git LFS ids Hugging Face shows on
-  each file's page, so you can check them yourself.
+- the **download URL**, at an exact Hugging Face commit (not a branch that can change),
+  from official publishers only: `ggerganov/whisper.cpp` (the whisper.cpp author),
+  `ggml-org` (the llama.cpp maintainers), and `Qwen` (the model's makers);
+- the **size** and **SHA-256**, which are the Git LFS ids Hugging Face shows on each
+  file's page, so you can check them yourself.
 
-The setup script refuses to install a file whose hash doesn't match, and **the
-app itself re-hashes a model before every load** and won't load one that doesn't
-match. A file you copy in by hand gets exactly the same check. So nobody has to
-trust a server or a download: if the bytes aren't exactly the pinned file, it
-never runs.
-
-The files are model weights only. `ggml` and `gguf` are data formats that don't
-execute code when loaded (unlike PyTorch `.pt`/pickle files), and the hash check
-means even a crafted file aimed at a parser bug is rejected before parsing.
+The script refuses to install a file whose hash doesn't match, and **the app re-hashes a
+model before every load** and won't load one that doesn't match, including a file
+copied in by hand. The formats (`ggml`, `gguf`) are plain weights that don't execute
+code when loaded, unlike PyTorch pickle files. The hash check also means even a file
+crafted to exploit a parser bug is rejected before it's parsed.
 
 ## Changing or adding a model
 
-Add an entry to `models/manifest.json` with the file's Hugging Face
-`/resolve/<commit>/` URL, its exact size in bytes, and its SHA-256. You can get
-both from the Hugging Face API, e.g.:
+Add an entry to `models/manifest.json` with the file's `/resolve/<commit>/` URL, exact
+size in bytes, and SHA-256 (from the Hugging Face API, e.g.
+`curl -s https://huggingface.co/api/models/<repo>/tree/main`). Mark Qwen3 models that
+reason before answering (anything that isn't an "Instruct-2507" build) with
+`"hybrid": true` so the worker switches thinking off. Then:
 
 ```bash
-curl -s https://huggingface.co/api/models/ggml-org/Qwen3-4B-Instruct-2507-Q8_0-GGUF/tree/main
+cargo test -p koe-core models     # every entry commit-pinned and well-formed
+cargo run -q -p koe-core --example cleanup_request -- "um so meet at 2 no wait 3" \
+  | target/release/koe-llm-worker ~/Library/Application\ Support/Koe/models/<file> [--no-think]
 ```
 
-Then run `cargo test -p koe-core models`, which checks that every entry is
-commit-pinned and well-formed.
+The second command sends the exact request Koe would send, so you can judge a model's
+cleanup quality before shipping it.

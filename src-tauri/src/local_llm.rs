@@ -13,9 +13,10 @@ pub struct LocalWorker {
 }
 
 impl LocalWorker {
-    pub fn spawn(worker_bin: &Path, model: &Path) -> anyhow::Result<Self> {
+    pub fn spawn(worker_bin: &Path, model: &Path, no_think: bool) -> anyhow::Result<Self> {
         let mut child = Command::new(worker_bin)
             .arg(model)
+            .args(no_think.then_some("--no-think"))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -64,7 +65,7 @@ impl Drop for LocalWorker {
 
 /// Platform application-support dir: `~/Library/Application Support/Koe`
 /// on macOS, `%APPDATA%\Koe` on Windows.
-fn app_support_dir() -> PathBuf {
+pub(crate) fn app_support_dir() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
         let base = std::env::var("APPDATA").unwrap_or_default();
@@ -101,22 +102,13 @@ pub fn worker_bin_path() -> Option<PathBuf> {
         .find(|p| p.exists())
 }
 
-/// Spawn the worker if the binary is present and a cleanup model in the models
-/// dir (same one as whisper's) matches its pinned SHA-256 in models/manifest.json.
-pub fn spawn_default() -> Option<LocalWorker> {
+/// Spawn the worker if the binary is present and a cleanup model verifies against
+/// models/manifest.json: the user's choice (`preferred`) if installed, otherwise
+/// the best one installed.
+pub fn spawn_default(preferred: Option<&str>) -> Option<LocalWorker> {
     let bin = worker_bin_path()?;
-    let dir = app_support_dir().join("models");
-    let model = match koe_core::models::find_verified(&dir, koe_core::ModelKind::Cleanup) {
-        Ok(found) => {
-            koe_core::models::log_found("[koe]", "cleanup", &found);
-            found.path
-        }
-        Err(problem) => {
-            eprintln!("[koe] no usable cleanup model in {}: {problem:?}", dir.display());
-            return None;
-        }
-    };
-    match LocalWorker::spawn(&bin, &model) {
+    let found = crate::models::choose(koe_core::ModelKind::Cleanup, preferred, "[koe]")?;
+    match LocalWorker::spawn(&bin, &found.path, found.spec.hybrid) {
         Ok(w) => {
             eprintln!("[koe] local LLM worker started ({})", bin.display());
             Some(w)

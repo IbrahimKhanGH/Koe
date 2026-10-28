@@ -36,6 +36,12 @@ pub struct Settings {
     /// An empty string disables the hands-free hotkey.
     #[serde(default = "default_hands_free_hotkey")]
     pub hands_free_hotkey: String,
+    /// The speech / cleanup model chosen on the Models page, as a file name from
+    /// models/manifest.json. `None` means automatic: the best one installed.
+    #[serde(default)]
+    pub speech_model: Option<String>,
+    #[serde(default)]
+    pub cleanup_model: Option<String>,
 }
 
 /// The out-of-the-box hands-free hotkey. Chosen to match what the cofounder
@@ -53,6 +59,8 @@ impl Default for Settings {
             cleanup_level: CleanupLevel::Light,
             sound_on_start: true,
             hands_free_hotkey: default_hands_free_hotkey(),
+            speech_model: None,
+            cleanup_model: None,
         }
     }
 }

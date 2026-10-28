@@ -5,6 +5,7 @@ import { Onboarding } from "./Onboarding";
 import { Sidebar, type Page } from "./Sidebar";
 import { Home } from "./Home";
 import { DictionaryPane } from "./DictionaryPane";
+import { ModelsPane } from "./ModelsPane";
 import { SettingsPane } from "./SettingsPane";
 import { Help } from "./Help";
 import { Icon } from "./icons";
@@ -229,6 +230,7 @@ export function App() {
           <div key={page} className="koe-rise" style={{ padding: "40px 48px 56px", maxWidth: 1040 }}>
             {page === "home" && <Home hotkey={prettyAccelerator(settings.hands_free_hotkey) } />}
             {page === "dictionary" && <DictionaryPane />}
+            {page === "models" && <ModelsPane settings={settings} onChange={update} />}
             {page === "settings" && (
               <SettingsPane settings={settings} onChange={update} status={status} refresh={refresh} />
             )}

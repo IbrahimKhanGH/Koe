@@ -553,18 +553,12 @@ mod imp {
         // SHA-256 matches models/manifest.json is loaded; the most accurate
         // verified one present wins.
         std::thread::spawn(|| {
-            let dir = support_dir().join("models");
-            let path = match koe_core::models::find_verified(&dir, ModelKind::Whisper) {
-                Ok(found) => {
-                    koe_core::models::log_found("[koe]", "speech", &found);
-                    found.path
-                }
-                Err(problem) => {
-                    eprintln!("[koe] no usable speech model in {}: {problem:?}", dir.display());
-                    ASR_MODEL_MISSING.store(true, Ordering::SeqCst);
-                    return;
-                }
+            let preferred = koe_core::Settings::load(&settings_path()).speech_model;
+            let Some(found) = crate::models::choose(ModelKind::Whisper, preferred.as_deref(), "[koe]") else {
+                ASR_MODEL_MISSING.store(true, Ordering::SeqCst);
+                return;
             };
+            let path = found.path;
             match koe_asr::WhisperEngine::load(&path) {
                 Ok(engine) => {
                     let _ = ASR.set(Arc::new(engine));
@@ -591,7 +585,7 @@ mod imp {
         // Start the local cleanup worker in the background (model load takes a few
         // seconds; the first local cleanup waits for it, subsequent ones are fast).
         std::thread::spawn(|| {
-            let worker = crate::local_llm::spawn_default();
+            let worker = crate::local_llm::spawn_default(current_settings().cleanup_model.as_deref());
             let _ = LOCAL.set(Mutex::new(worker));
         });
 

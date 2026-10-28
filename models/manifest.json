@@ -1,45 +1,66 @@
 {
-  "_about": "The only model files Koe will load. Each is pinned to an exact Hugging Face commit and SHA-256; the app refuses any file whose hash does not match, and scripts/get-models.sh downloads from these URLs and checks the same hashes. Within a kind, earlier entries are preferred when several are installed. Hashes are the Git LFS object ids Hugging Face publishes for each file.",
+  "_about": "The only model files Koe will load. Each is pinned to an exact Hugging Face commit and SHA-256 (the Git LFS id Hugging Face publishes); the app refuses any file whose hash does not match, and scripts/get-models.sh downloads from these URLs and checks the same hashes. Within a kind, entries are in quality order: with no model chosen in the app, the first installed one that verifies is used. `tiers` says which `get-models.sh --tier` installs each file; `hybrid` marks Qwen3 models that think before answering unless told not to.",
+  "tiers": {
+    "compact": "Speech only (0.5 GB): pastes what you said, with punctuation. No cleanup model.",
+    "balanced": "Best accuracy for the size. The default.",
+    "max": "Strongest cleanup. Needs 32 GB of memory or more."
+  },
   "models": [
     {
       "kind": "whisper",
       "file": "ggml-large-v3-turbo.bin",
+      "label": "Whisper large-v3 turbo",
+      "note": "Most accurate, especially on names and jargon.",
       "size": 1624555275,
+      "ram_gb": 2,
+      "tiers": ["balanced", "max"],
       "sha256": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
-      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo.bin",
-      "recommended": true
-    },
-    {
-      "kind": "whisper",
-      "file": "ggml-medium.en.bin",
-      "size": 1533774781,
-      "sha256": "cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356",
-      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-medium.en.bin",
-      "recommended": false
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo.bin"
     },
     {
       "kind": "whisper",
       "file": "ggml-small.en.bin",
+      "label": "Whisper small (English)",
+      "note": "A third of the size; a little less accurate.",
       "size": 487614201,
+      "ram_gb": 1,
+      "tiers": ["compact"],
       "sha256": "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
-      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.en.bin",
-      "recommended": false
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.en.bin"
     },
     {
       "kind": "whisper",
       "file": "ggml-base.en.bin",
+      "label": "Whisper base (English)",
+      "note": "Smallest and fastest to load; noticeably less accurate.",
       "size": 147964211,
+      "ram_gb": 0.5,
+      "tiers": [],
       "sha256": "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
-      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.en.bin",
-      "recommended": false
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.en.bin"
+    },
+    {
+      "kind": "cleanup",
+      "file": "Qwen3-30B-A3B-Q4_K_M.gguf",
+      "label": "Qwen3 30B-A3B",
+      "note": "Mixture-of-experts: 30B parameters, about 3B active per word, so it stays quick.",
+      "size": 18556685824,
+      "ram_gb": 20,
+      "tiers": ["max"],
+      "hybrid": true,
+      "sha256": "0d003f6662faee786ed5da3e31b29c978de5ae5d275c8794c606a7f3c01aa8f5",
+      "url": "https://huggingface.co/Qwen/Qwen3-30B-A3B-GGUF/resolve/e4d4bafdfb96a411a163846265362aceb0b9c63a/Qwen3-30B-A3B-Q4_K_M.gguf"
     },
     {
       "kind": "cleanup",
       "file": "qwen3-4b-instruct-2507-q8_0.gguf",
+      "label": "Qwen3 4B Instruct",
+      "note": "Handles self-corrections, lists, and tone well.",
       "size": 4280403520,
+      "ram_gb": 5,
+      "tiers": ["balanced"],
       "sha256": "ae916ede1c010a26955ee8ae2e908bf8815a3f135ec860439ab924701c69d5f1",
-      "url": "https://huggingface.co/ggml-org/Qwen3-4B-Instruct-2507-Q8_0-GGUF/resolve/e6f794d44f9395d0184a966c27b5ae99ea356fcb/qwen3-4b-instruct-2507-q8_0.gguf",
-      "recommended": true
+      "url": "https://huggingface.co/ggml-org/Qwen3-4B-Instruct-2507-Q8_0-GGUF/resolve/e6f794d44f9395d0184a966c27b5ae99ea356fcb/qwen3-4b-instruct-2507-q8_0.gguf"
     }
   ]
 }

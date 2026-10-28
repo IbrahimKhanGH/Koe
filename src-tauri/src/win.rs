@@ -369,18 +369,12 @@ pub fn install(app: AppHandle) {
     // Load Whisper.
     // Only a model whose SHA-256 matches models/manifest.json is loaded.
     std::thread::spawn(|| {
-        let dir = support_dir().join("models");
-        let path = match koe_core::models::find_verified(&dir, ModelKind::Whisper) {
-            Ok(found) => {
-                koe_core::models::log_found("[koe:win]", "speech", &found);
-                found.path
-            }
-            Err(problem) => {
-                eprintln!("[koe:win] no usable speech model in {}: {problem:?}", dir.display());
-                ASR_MODEL_MISSING.store(true, Ordering::SeqCst);
-                return;
-            }
+        let preferred = current_settings_inner().speech_model;
+        let Some(found) = crate::models::choose(ModelKind::Whisper, preferred.as_deref(), "[koe:win]") else {
+            ASR_MODEL_MISSING.store(true, Ordering::SeqCst);
+            return;
         };
+        let path = found.path;
         match koe_asr::WhisperEngine::load(&path) {
             Ok(engine) => {
                 let _ = ASR.set(Arc::new(engine));
@@ -394,7 +388,7 @@ pub fn install(app: AppHandle) {
     });
     // Start the local cleanup worker.
     std::thread::spawn(|| {
-        if let Some(w) = crate::local_llm::spawn_default() {
+        if let Some(w) = crate::local_llm::spawn_default(current_settings_inner().cleanup_model.as_deref()) {
             if let Some(slot) = LOCAL.get() {
                 *slot.lock().unwrap() = Some(w);
             }

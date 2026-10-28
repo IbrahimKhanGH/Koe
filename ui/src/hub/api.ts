@@ -13,6 +13,10 @@ export interface Settings {
   // start talking with no key held, again to stop. Default "CmdOrCtrl+Shift+Space".
   // Empty disables it. (Holding Fn and double-tapping Fn always work too.)
   hands_free_hotkey: string;
+  // The models chosen on the Models page (file names from models/manifest.json);
+  // null means automatic: the best one installed.
+  speech_model: string | null;
+  cleanup_model: string | null;
 }
 
 // Mirrors `permissions::Grant` in src-tauri. A bare boolean couldn't tell
@@ -75,6 +79,8 @@ export const DEFAULT_SETTINGS: Settings = {
   cleanup_level: "light",
   sound_on_start: true,
   hands_free_hotkey: "CmdOrCtrl+Shift+Space",
+  speech_model: null,
+  cleanup_model: null,
 };
 
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -238,3 +244,43 @@ export async function removeDictionaryEntry(correct: string): Promise<void> {
   }
 }
 
+
+// ── Models ───────────────────────────────────────────────────────────────────
+// Mirrors `models::ModelInfo` / `ModelsReport` in src-tauri.
+export type ModelKind = "whisper" | "cleanup";
+export type Tier = "compact" | "balanced" | "max";
+
+export interface ModelInfo {
+  kind: ModelKind;
+  file: string;
+  label: string;
+  note: string;
+  size: number;
+  ram_gb: number;
+  tiers: Tier[];
+  hybrid: boolean;
+  installed: boolean;
+  active: boolean;
+  failed_check: boolean;
+}
+
+export interface ModelsReport {
+  dir: string;
+  models: ModelInfo[];
+}
+
+export async function getModels(): Promise<ModelsReport> {
+  try {
+    return await invoke<ModelsReport>("get_models");
+  } catch {
+    return { dir: "", models: [] };
+  }
+}
+
+export async function restartApp(): Promise<void> {
+  try {
+    await invoke<void>("restart_app");
+  } catch {
+    /* browser preview */
+  }
+}

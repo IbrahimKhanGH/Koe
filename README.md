@@ -19,8 +19,9 @@ Prerequisites: Xcode command-line tools (`xcode-select --install`),
 git clone https://github.com/IbrahimKhanGH/Koe.git
 cd Koe
 
-# 1. Models (~5.9 GB, one time). Downloads from Hugging Face and checks every
-#    file against its pinned SHA-256. See docs/MODELS.md.
+# 1. Models, one time. Downloads from Hugging Face and checks every file
+#    against its pinned SHA-256. Balanced (5.9 GB) by default; add
+#    --tier compact (0.5 GB, speech only) or --tier max (20 GB, 32 GB+ Macs).
 scripts/get-models.sh
 
 # 2. Build and install the app.
@@ -42,10 +43,12 @@ Each rebuild is a new app to macOS, so re-grant both after reinstalling.
 | **⌘⇧Space** (change it in Settings) | Toggle: press to start, press again to stop and paste |
 | Pill **■** / **✕** buttons | Stop and paste / throw the recording away |
 
-Settings → **Cleanup Engine**: *Local* (on-device cleanup, default) or *Raw*
-(exactly what Whisper heard). **Auto Cleanup** sets how much it edits, from
-None to High. **Dictionary** holds names and terms it should always spell
-your way.
+**Models** shows the three tiers (Compact, Balanced, Max), what's installed and
+loaded, and the command to fetch the rest; pick a speech and a cleanup model or
+leave both on Automatic. See [docs/MODELS.md](docs/MODELS.md).
+Settings → **Cleanup engine**: *Local model* (default) or *Raw* (exactly what
+Whisper heard); **Cleanup level** sets how much it edits, from None to High.
+**Dictionary** holds names and terms it should always spell your way.
 
 ## Security model
 

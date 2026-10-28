@@ -256,7 +256,7 @@ export function SettingsPane({
   const mode = MODES.find((m) => m.value === settings.cleanup_mode);
   return (
     <div style={{ maxWidth: 860 }}>
-      <PageTitle index={3} eyebrow="Settings" sub="Everything runs on this Mac. Nothing you say is ever sent anywhere.">
+      <PageTitle index={4} eyebrow="Settings" sub="Everything runs on this Mac. Nothing you say is ever sent anywhere.">
         Your setup
       </PageTitle>
 
