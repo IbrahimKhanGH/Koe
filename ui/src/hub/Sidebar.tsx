@@ -3,7 +3,7 @@ import { theme } from "./theme";
 import { Wordmark } from "./motifs";
 import { Eyebrow } from "./ui";
 
-export type Page = "home" | "dictionary" | "models" | "settings" | "help";
+export type Page = "home" | "dictionary" | "models" | "settings" | "help" | "privacy";
 
 export const PAGES: { key: Page; label: string }[] = [
   { key: "home", label: "Home" },
@@ -74,13 +74,30 @@ export function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => v
 
       <div style={{ flex: 1 }} />
 
-      <div style={{ margin: "0 18px", padding: "14px 0 0", borderTop: `1px solid ${theme.rule}` }}>
-        <Eyebrow style={{ marginBottom: 8 }}>On-device</Eyebrow>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: theme.textMuted }}>
+      {/* The privacy plate doubles as the way into the Privacy page. */}
+      <button
+        onClick={() => setPage("privacy")}
+        aria-current={page === "privacy" ? "page" : undefined}
+        className="koe-nav"
+        style={{
+          margin: "0 10px",
+          padding: "14px 8px 4px",
+          border: "none",
+          borderTop: `1px solid ${theme.rule}`,
+          background: "transparent",
+          textAlign: "left",
+          cursor: "pointer",
+          color: page === "privacy" ? theme.textStrong : theme.textMuted,
+        }}
+      >
+        <Eyebrow color={page === "privacy" ? palette.red : theme.textFaint} style={{ marginBottom: 8 }}>
+          On-device · Privacy →
+        </Eyebrow>
+        <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
           <span style={{ width: 7, height: 7, background: palette.chartreuse, outline: "1px solid rgba(18,18,17,0.25)" }} />
           Nothing leaves this Mac
-        </div>
-      </div>
+        </span>
+      </button>
     </aside>
   );
 }

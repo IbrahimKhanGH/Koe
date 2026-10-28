@@ -8,6 +8,7 @@ import { DictionaryPane } from "./DictionaryPane";
 import { ModelsPane } from "./ModelsPane";
 import { SettingsPane } from "./SettingsPane";
 import { Help } from "./Help";
+import { PrivacyPane } from "./PrivacyPane";
 import { Icon } from "./icons";
 import { Button, Eyebrow } from "./ui";
 import { prettyAccelerator } from "./format";
@@ -232,9 +233,16 @@ export function App() {
             {page === "dictionary" && <DictionaryPane />}
             {page === "models" && <ModelsPane settings={settings} onChange={update} />}
             {page === "settings" && (
-              <SettingsPane settings={settings} onChange={update} status={status} refresh={refresh} />
+              <SettingsPane
+                settings={settings}
+                onChange={update}
+                status={status}
+                refresh={refresh}
+                onOpenPrivacy={() => setPage("privacy")}
+              />
             )}
             {page === "help" && <Help />}
+            {page === "privacy" && <PrivacyPane />}
           </div>
         </main>
       </div>

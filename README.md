@@ -59,7 +59,10 @@ loaded, and the command to fetch the rest; pick a speech and a cleanup model or
 leave both on Automatic. See [docs/MODELS.md](docs/MODELS.md).
 Settings → **Cleanup engine**: *Local model* (default) or *Raw* (exactly what
 Whisper heard); **Cleanup level** sets how much it edits, from None to High.
-**Dictionary** holds names and terms it should always spell your way.
+**Dictionary** holds names and terms it should always spell your way. **Privacy**
+(the "Nothing leaves this Mac" plate in the sidebar, or Settings → Privacy) shows
+where your voice goes, what's stored, which models are loaded and verified, and
+how to check for yourself that Koe sends nothing.
 
 ## Security model
 

@@ -247,11 +247,13 @@ export function SettingsPane({
   onChange,
   status,
   refresh,
+  onOpenPrivacy,
 }: {
   settings: Settings;
   onChange: (s: Settings) => void;
   status: Status;
   refresh: () => void;
+  onOpenPrivacy: () => void;
 }) {
   const mode = MODES.find((m) => m.value === settings.cleanup_mode);
   return (
@@ -334,6 +336,12 @@ export function SettingsPane({
             }}
           />
         </div>
+      </Row>
+
+      <Row index={6} title="Privacy" desc="Where your voice goes, what's stored, and how to check it yourself.">
+        <Button variant="ghost" onClick={onOpenPrivacy}>
+          How Koe keeps everything on this Mac →
+        </Button>
       </Row>
     </div>
   );
