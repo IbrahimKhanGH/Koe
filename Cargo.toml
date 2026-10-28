@@ -1,0 +1,32 @@
+# Koe — Cargo workspace root.
+# Members are added as each crate is scaffolded (a workspace may only list dirs that exist).
+[workspace]
+resolver = "2"
+members = [
+    "crates/koe-ipc",
+    "crates/koe-core",
+    "crates/koe-audio",
+    "crates/koe-asr",
+    "crates/koe-llm-worker",
+    "crates/koe-sidecar",
+    "src-tauri",
+]
+
+[workspace.package]
+version = "0.1.1"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+authors = ["Koe"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1.0.95"
+thiserror = "1"
+tracing = "0.1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

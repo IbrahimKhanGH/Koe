@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Microphone capture for dictation. -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <!-- No JIT, unsigned-memory or library-validation exceptions: whisper.cpp and
+         llama.cpp are statically linked and compile their Metal shaders through
+         the Metal API, so the hardened runtime can stay fully on. -->
+    <!-- Not sandboxed: Accessibility + CGEventTap require it off. -->
+</dict>
+</plist>

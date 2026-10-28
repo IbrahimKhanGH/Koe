@@ -1,0 +1,45 @@
+{
+  "_about": "The only model files Koe will load. Each is pinned to an exact Hugging Face commit and SHA-256; the app refuses any file whose hash does not match, and scripts/get-models.sh downloads from these URLs and checks the same hashes. Within a kind, earlier entries are preferred when several are installed. Hashes are the Git LFS object ids Hugging Face publishes for each file.",
+  "models": [
+    {
+      "kind": "whisper",
+      "file": "ggml-large-v3-turbo.bin",
+      "size": 1624555275,
+      "sha256": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo.bin",
+      "recommended": true
+    },
+    {
+      "kind": "whisper",
+      "file": "ggml-medium.en.bin",
+      "size": 1533774781,
+      "sha256": "cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-medium.en.bin",
+      "recommended": false
+    },
+    {
+      "kind": "whisper",
+      "file": "ggml-small.en.bin",
+      "size": 487614201,
+      "sha256": "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.en.bin",
+      "recommended": false
+    },
+    {
+      "kind": "whisper",
+      "file": "ggml-base.en.bin",
+      "size": 147964211,
+      "sha256": "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.en.bin",
+      "recommended": false
+    },
+    {
+      "kind": "cleanup",
+      "file": "qwen3-4b-instruct-2507-q8_0.gguf",
+      "size": 4280403520,
+      "sha256": "ae916ede1c010a26955ee8ae2e908bf8815a3f135ec860439ab924701c69d5f1",
+      "url": "https://huggingface.co/ggml-org/Qwen3-4B-Instruct-2507-Q8_0-GGUF/resolve/e6f794d44f9395d0184a966c27b5ae99ea356fcb/qwen3-4b-instruct-2507-q8_0.gguf",
+      "recommended": true
+    }
+  ]
+}
