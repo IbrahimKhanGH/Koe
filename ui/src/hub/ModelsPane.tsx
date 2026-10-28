@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { font, palette } from "../tokens/values";
 import { theme } from "./theme";
 import { Button, Card, Eyebrow, PageTitle } from "./ui";
-import { downloadModels, getModels, openModelCard, restartApp, type ModelInfo, type ModelKind, type ModelsReport, type Settings, type Tier } from "./api";
+import { NO_MODELS, downloadModels, getModels, openModelCard, restartApp, type ModelInfo, type ModelKind, type ModelsReport, type Settings, type Tier } from "./api";
 
-const TIERS: { key: Tier; name: string; blurb: string }[] = [
+export const TIERS: { key: Tier; name: string; blurb: string }[] = [
   { key: "compact", name: "Compact", blurb: "Speech only. Pastes what you said, with punctuation; no rewriting." },
   { key: "balanced", name: "Balanced", blurb: "Best accuracy for the size. The default." },
   { key: "max", name: "Max", blurb: "Strongest rewriting, but keeps ~20 GB of memory in use while Koe runs. Best with 48 GB+." },
@@ -303,7 +303,7 @@ function wanted(models: ModelInfo[], kind: ModelKind, choice: string | null): Mo
 }
 
 export function ModelsPane({ settings, onChange }: { settings: Settings; onChange: (s: Settings) => void }) {
-  const [report, setReport] = useState<ModelsReport>({ dir: "", models: [] });
+  const [report, setReport] = useState<ModelsReport>(NO_MODELS);
 
   useEffect(() => {
     let alive = true;

@@ -16,10 +16,12 @@ import {
   getSettings,
   setSettings,
   getStatus,
+  getModels,
   getLastError,
   onPermissions,
   requestAccessibility,
   requestMicrophone,
+  type ModelsReport,
   type Settings,
   type Status,
   type LastError,
@@ -84,6 +86,7 @@ export function App() {
   const [page, setPage] = useState<Page>("home");
   const [settings, setLocalSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [status, setStatus] = useState<Status>(UNKNOWN_STATUS);
+  const [models, setModels] = useState<ModelsReport | null>(null);
   // Set once macOS has answered, so the setup screen never flashes on launch.
   const [statusKnown, setStatusKnown] = useState(false);
   // "Skip for now" on the setup screen, for this session only.
@@ -96,8 +99,9 @@ export function App() {
   // clock on every tick is a poll that can be starved.
   const refresh = useCallback(
     () =>
-      getStatus().then((s) => {
+      Promise.all([getStatus(), getModels()]).then(([s, m]) => {
         setStatus(s);
+        setModels(m);
         setStatusKnown(true);
       }),
     [],
@@ -175,16 +179,17 @@ export function App() {
 
   // Until macOS has answered, show just the page colour: no flash of either the
   // setup screen or the app.
-  if (!statusKnown) {
+  if (!statusKnown || !models) {
     return <div style={{ height: "100vh", background: theme.pageBg }} />;
   }
 
-  // The setup screen comes back whenever a required permission is missing — on
-  // first launch, and after every update, since each new build is a new app to
-  // macOS — unless skipped for this session.
-  const ready = status.accessibility && status.microphone;
+  // The setup screen stays until Koe can actually dictate: both permissions on
+  // (it comes back after every update, since each new build is a new app to
+  // macOS) and a speech model loaded. "Skip for now" dismisses it for the session.
+  const speechLoaded = models.models.some((m) => m.kind === "whisper" && m.active);
+  const ready = status.accessibility && status.microphone && speechLoaded;
   if (!ready && !skipped) {
-    return <Onboarding status={status} refresh={refresh} onSkip={() => setSkipped(true)} />;
+    return <Onboarding status={status} models={models} refresh={refresh} onSkip={() => setSkipped(true)} />;
   }
 
   // Two independent reasons for the banner: a permission is missing after
@@ -206,9 +211,16 @@ export function App() {
             actionLabel: "Grant Microphone",
             onAction: () => requestMicrophone(),
           }
-        : lastError
-          ? { headline: lastError.headline, detail: lastError.detail }
-          : null;
+        : !speechLoaded
+          ? {
+              headline: "No speech model loaded",
+              detail: "Download one on the Models page to start dictating.",
+              actionLabel: "Open Models",
+              onAction: () => setPage("models"),
+            }
+          : lastError
+            ? { headline: lastError.headline, detail: lastError.detail }
+            : null;
 
   return (
     <div

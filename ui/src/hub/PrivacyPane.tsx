@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { font, palette } from "../tokens/values";
 import { theme } from "./theme";
 import { Card, Eyebrow, Key, PageTitle } from "./ui";
-import { getModels, type ModelsReport } from "./api";
+import { NO_MODELS, getModels, type ModelsReport } from "./api";
 
 // ── The path your voice takes ────────────────────────────────────────────────
 // Four stations inside a frame labeled "This Mac", joined by a red thread, and
@@ -121,7 +121,7 @@ const STORED: { file: string; what: string }[] = [
 ];
 
 export function PrivacyPane() {
-  const [report, setReport] = useState<ModelsReport>({ dir: "", models: [] });
+  const [report, setReport] = useState<ModelsReport>(NO_MODELS);
   useEffect(() => {
     void getModels().then(setReport);
   }, []);

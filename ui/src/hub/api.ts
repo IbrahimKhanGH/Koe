@@ -266,18 +266,24 @@ export interface ModelInfo {
   installed: boolean;
   active: boolean;
   failed_check: boolean;
+  /** Bytes on disk so far: the whole file once installed, else the download in progress. */
+  downloaded: number;
 }
 
 export interface ModelsReport {
   dir: string;
+  /** This Mac's memory, for recommending a tier (0 if unknown). */
+  memory_gb: number;
   models: ModelInfo[];
 }
+
+export const NO_MODELS: ModelsReport = { dir: "", memory_gb: 0, models: [] };
 
 export async function getModels(): Promise<ModelsReport> {
   try {
     return await invoke<ModelsReport>("get_models");
   } catch {
-    return { dir: "", models: [] };
+    return NO_MODELS;
   }
 }
 

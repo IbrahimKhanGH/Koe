@@ -1,9 +1,178 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { font, motion, palette } from "../tokens/values";
 import { theme } from "./theme";
 import { Assembly, Wordmark } from "./motifs";
 import { Button, Eyebrow, StatusMark } from "./ui";
-import { requestAccessibility, requestMicrophone, requestInputMonitoring, type Status } from "./api";
+import {
+  downloadModels,
+  requestAccessibility,
+  requestInputMonitoring,
+  requestMicrophone,
+  restartApp,
+  type ModelsReport,
+  type Status,
+  type Tier,
+} from "./api";
+import { TIERS } from "./ModelsPane";
+
+function gb(bytes: number): string {
+  const v = bytes / 1e9;
+  return `${v < 1 ? v.toFixed(2) : v.toFixed(1)} GB`;
+}
+
+// Step 04: pick a tier and download it, without leaving setup. The download runs
+// in Terminal (Koe has no network code); this step watches the files arrive and
+// shows progress, then asks for a restart so Koe loads them.
+function ModelStep({ n, report, active }: { n: number; report: ModelsReport; active: boolean }) {
+  const [tier, setTier] = useState<Tier>("balanced");
+  const [started, setStarted] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const tierFiles = (t: Tier) => report.models.filter((m) => m.tiers.includes(t));
+  const files = tierFiles(tier);
+  const total = files.reduce((s, m) => s + m.size, 0);
+  const got = files.reduce((s, m) => s + Math.min(m.downloaded, m.size), 0);
+  const failed = files.filter((m) => m.failed_check);
+  const allInstalled = files.length > 0 && files.every((m) => m.installed);
+  const speechLoaded = report.models.some((m) => m.kind === "whisper" && m.active);
+  // In progress = this click started one, or get-models.sh has a partial file on disk.
+  const inProgress = files.some((m) => !m.installed && m.downloaded > 0);
+  const downloading = !allInstalled && (started || inProgress);
+  // Max keeps ~20 GB in memory while Koe runs; don't offer it where that won't fit.
+  const maxFits = report.memory_gb === 0 || report.memory_gb >= 32;
+
+  const start = async () => {
+    setStarted(true);
+    setNote(await downloadModels(tier));
+  };
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "34px minmax(0, 1fr)",
+        gap: 14,
+        padding: "18px 0",
+        borderTop: `1px solid ${active ? theme.textStrong : theme.rule}`,
+      }}
+    >
+      <span style={{ fontFamily: font.mono, fontSize: 11, color: active ? palette.red : theme.textFaint, paddingTop: 3 }}>
+        {String(n).padStart(2, "0")}
+      </span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+          <span style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: theme.textStrong }}>Download the models</span>
+            <Eyebrow>Required</Eyebrow>
+          </span>
+          {speechLoaded && (
+            <span style={{ display: "flex", alignItems: "center" }}>
+              <StatusMark ok />
+              <Eyebrow color={theme.textMuted}>Loaded</Eyebrow>
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: 12.5, lineHeight: 1.5, color: theme.textMuted, marginTop: 4 }}>
+          Official, openly licensed models that run on this Mac. One download; nothing you say is ever sent anywhere.
+        </div>
+
+        {!speechLoaded && !allInstalled && !downloading && (
+          <>
+            <div role="radiogroup" aria-label="Model tier" style={{ display: "grid", gap: 6, marginTop: 14 }}>
+              {TIERS.map((t) => {
+                const disabled = t.key === "max" && !maxFits;
+                const selected = tier === t.key;
+                const size = tierFiles(t.key).reduce((s, m) => s + m.size, 0);
+                return (
+                  <button
+                    key={t.key}
+                    role="radio"
+                    aria-checked={selected}
+                    disabled={disabled}
+                    onClick={() => setTier(t.key)}
+                    className={selected || disabled ? undefined : "koe-seg"}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "12px 84px minmax(0, 1fr) auto",
+                      alignItems: "baseline",
+                      gap: 10,
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      cursor: disabled ? "default" : "pointer",
+                      border: `1px solid ${selected ? palette.red : theme.ruleStrong}`,
+                      background: selected ? "rgba(214, 36, 41, 0.05)" : "transparent",
+                      opacity: disabled ? 0.45 : 1,
+                    }}
+                  >
+                    <span style={{ width: 8, height: 8, background: selected ? palette.red : "transparent", border: `1px solid ${selected ? palette.red : theme.ruleStrong}` }} />
+                    <span style={{ fontSize: 13.5, fontWeight: 600, color: theme.textStrong }}>
+                      {t.name}
+                    </span>
+                    <span style={{ fontSize: 12, color: theme.textMuted }}>
+                      {disabled
+                        ? `Needs 32 GB of memory; this Mac has ${report.memory_gb} GB.`
+                        : t.key === "balanced"
+                          ? "Recommended. Best accuracy for the size."
+                          : t.blurb}
+                    </span>
+                    <span style={{ fontFamily: font.mono, fontSize: 11, color: theme.textFaint }}>{gb(size)}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <Button variant={active ? "accent" : "ink"} size="sm" onClick={() => void start()}>
+                Download {TIERS.find((t) => t.key === tier)?.name} · {gb(total - got)}
+              </Button>
+            </div>
+          </>
+        )}
+
+        {downloading && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ height: 4, background: theme.surfaceSunk }}>
+              <div style={{ height: 4, width: `${total ? (got / total) * 100 : 0}%`, background: palette.red, transition: "width 600ms" }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12, color: theme.textMuted }}>
+              <span>
+                {got >= total && total > 0
+                  ? "Checking fingerprints…"
+                  : `Downloading in Terminal. Keep that window open.`}
+              </span>
+              <span style={{ fontFamily: font.mono, fontSize: 11 }}>
+                {gb(got)} of {gb(total)}
+              </span>
+            </div>
+            {note && <div style={{ fontSize: 12, color: palette.red, marginTop: 6 }}>{note}</div>}
+            {got === 0 && (
+              <button
+                onClick={() => void start()}
+                style={{ marginTop: 8, padding: 0, border: "none", background: "transparent", cursor: "pointer", fontSize: 12, color: theme.textMuted, textDecoration: "underline", textUnderlineOffset: 3 }}
+              >
+                No Terminal window? Open it again
+              </button>
+            )}
+          </div>
+        )}
+
+        {failed.length > 0 && (
+          <div style={{ fontSize: 12, color: palette.red, marginTop: 10 }}>
+            {failed.map((m) => m.label).join(", ")} didn't match its fingerprint and won't be used. Download again.
+          </div>
+        )}
+
+        {allInstalled && !speechLoaded && (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}>
+            <Button variant="accent" size="sm" onClick={() => void restartApp()}>
+              Restart Koe to finish
+            </Button>
+            <span style={{ fontSize: 12, color: theme.textMuted }}>Downloaded and verified. Koe loads them on restart.</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // A blocking permission gate: the app can't be used until Accessibility and
 // Microphone are granted. The three permissions are presented in order (each
@@ -67,10 +236,12 @@ function Step({
 
 export function Onboarding({
   status,
+  models,
   refresh,
   onSkip,
 }: {
   status: Status;
+  models: ModelsReport;
   refresh: () => void;
   onSkip: () => void;
 }) {
@@ -144,7 +315,7 @@ export function Onboarding({
               color: theme.textStrong,
             }}
           >
-            Three switches,
+            Four steps,
             <br />
             then just talk.
           </h1>
@@ -177,22 +348,23 @@ export function Onboarding({
             required
             onGrant={() => requestMicrophone()}
           />
+          <Step
+            n={3}
+            title="Input Monitoring"
+            detail="Extra reliability for key detection. You can skip it."
+            done={inp}
+            active={false}
+            locked={!(acc && mic)}
+            required={false}
+            onGrant={() => requestInputMonitoring()}
+          />
           <div style={{ borderBottom: `1px solid ${theme.rule}` }}>
-            <Step
-              n={3}
-              title="Input Monitoring"
-              detail="Extra reliability for key detection. You can skip it."
-              done={inp}
-              active={acc && mic && !inp}
-              locked={!(acc && mic)}
-              required={false}
-              onGrant={() => requestInputMonitoring()}
-            />
+            <ModelStep n={4} report={models} active={acc && mic} />
           </div>
 
           <p style={{ fontSize: 12, color: theme.textFaint, lineHeight: 1.55, marginTop: 22 }}>
-            Koe opens by itself once Accessibility and Microphone are on. If a step stays unchecked after you switch it
-            on in System Settings, click its Grant button again.
+            Koe opens by itself once Accessibility and Microphone are on and a speech model is loaded. If a step stays
+            unchecked after you switch it on in System Settings, click its Grant button again.
           </p>
           <button
             onClick={onSkip}

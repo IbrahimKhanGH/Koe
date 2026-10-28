@@ -64,12 +64,28 @@ pub struct ModelInfo {
     active: bool,
     /// Present but failed its SHA-256 check, so it was skipped.
     failed_check: bool,
+    /// Bytes on disk so far: the whole file once installed, otherwise how much of
+    /// the `.partial` file get-models.sh is downloading (for a progress bar).
+    downloaded: u64,
 }
 
 #[derive(Serialize)]
 pub struct ModelsReport {
     dir: String,
+    /// This Mac's memory, for recommending a tier.
+    memory_gb: u64,
     models: Vec<ModelInfo>,
+}
+
+/// Installed memory in GB (0 if it can't be read).
+fn memory_gb() -> u64 {
+    std::process::Command::new("/usr/sbin/sysctl")
+        .args(["-n", "hw.memsize"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .map_or(0, |bytes| bytes / (1 << 30))
 }
 
 pub fn report() -> ModelsReport {
@@ -82,15 +98,22 @@ pub fn report() -> ModelsReport {
                 ModelKind::Whisper => loaded.speech.as_deref() == Some(spec.file.as_str()),
                 ModelKind::Cleanup => loaded.cleanup.as_deref() == Some(spec.file.as_str()),
             };
+            let installed = koe_core::models::installed(&dir, &spec);
+            let downloaded = if installed {
+                spec.size
+            } else {
+                std::fs::metadata(dir.join(format!("{}.partial", spec.file))).map_or(0, |m| m.len())
+            };
             ModelInfo {
-                installed: koe_core::models::installed(&dir, &spec),
+                installed,
                 failed_check: loaded.rejected.contains(&spec.file),
+                downloaded,
                 active,
                 spec,
             }
         })
         .collect();
-    ModelsReport { dir: dir.display().to_string(), models }
+    ModelsReport { dir: dir.display().to_string(), memory_gb: memory_gb(), models }
 }
 
 /// Open Terminal running the download script bundled in Koe.app for `target`:
