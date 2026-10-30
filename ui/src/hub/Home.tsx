@@ -4,7 +4,7 @@ import { theme } from "./theme";
 import { Card, Eyebrow, Key, inputStyle, useStats } from "./ui";
 import { Assembly, Thread, WovenGrid } from "./motifs";
 import { Icon } from "./icons";
-import { getHistory, type HistoryItem, type StatsSummary } from "./api";
+import { copyText, getHistory, type HistoryItem, type StatsSummary } from "./api";
 import { appName, dayKey, dayLabel, fmtCompact, fmtDuration, fmtNum, fmtTimeOfDay } from "./format";
 
 // ── Header ───────────────────────────────────────────────────────────────────
@@ -193,6 +193,44 @@ function groupByDay(items: HistoryItem[]): Group[] {
   return groups;
 }
 
+// Copy one dictation back to the clipboard; shows "Copied" for a moment.
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    if (await copyText(text)) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    }
+  };
+  return (
+    <button
+      onClick={() => void copy()}
+      title="Copy"
+      aria-label={copied ? "Copied" : "Copy this dictation"}
+      className={copied ? undefined : "koe-copy"}
+      style={{
+        flex: "0 0 auto",
+        alignSelf: "flex-start",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "flex-end",
+        gap: 6,
+        // Room for "Copied" up front, so the text beside it never re-wraps.
+        width: 88,
+        padding: "3px 6px",
+        border: "none",
+        background: "transparent",
+        cursor: "pointer",
+        // Idle colours (faint, darker on hover) live in the .koe-copy class.
+        color: copied ? palette.red : undefined,
+      }}
+    >
+      <Icon name={copied ? "check" : "copy"} size={15} />
+      {copied && <Eyebrow color={palette.red}>Copied</Eyebrow>}
+    </button>
+  );
+}
+
 function HistoryRow({ item }: { item: HistoryItem }) {
   return (
     <div className="koe-row" style={{ display: "flex", gap: 18, padding: "12px 2px", borderTop: `1px solid ${theme.rule}` }}>
@@ -214,6 +252,7 @@ function HistoryRow({ item }: { item: HistoryItem }) {
           <Eyebrow style={{ marginTop: 6, fontSize: 10 }}>{appName(item.app)}</Eyebrow>
         )}
       </div>
+      <CopyButton text={item.text} />
     </div>
   );
 }

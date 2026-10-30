@@ -298,6 +298,16 @@ export async function downloadModels(target: string): Promise<string | null> {
   }
 }
 
+/** Copy a past dictation to the clipboard (this Mac only, hidden from clipboard managers). */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await invoke<void>("copy_text", { text });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Open a model's official page (from the manifest) in the browser. */
 export async function openModelCard(file: string): Promise<void> {
   try {

@@ -1955,7 +1955,7 @@ dependencies = [
 
 [[package]]
 name = "koe-asr"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "hound",
@@ -1965,7 +1965,7 @@ dependencies = [
 
 [[package]]
 name = "koe-audio"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "cpal",
@@ -1973,7 +1973,7 @@ dependencies = [
 
 [[package]]
 name = "koe-core"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "koe-ipc",
@@ -1987,7 +1987,7 @@ dependencies = [
 
 [[package]]
 name = "koe-ipc"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -1996,7 +1996,7 @@ dependencies = [
 
 [[package]]
 name = "koe-llm-worker"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "llama-cpp-2",
@@ -2006,11 +2006,11 @@ dependencies = [
 
 [[package]]
 name = "koe-sidecar"
-version = "0.2.3"
+version = "0.2.4"
 
 [[package]]
 name = "koe-tauri"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "arboard",

@@ -35,6 +35,9 @@ style.textContent = `
   .koe-nav:hover { color: ${palette.ink} !important; }
   .koe-row:hover { background: rgba(18, 18, 17, 0.025); }
   .koe-row:hover .koe-row-action { opacity: 1 !important; }
+  .koe-copy { color: ${palette.slate}; }
+  .koe-row:hover .koe-copy { color: ${palette.graphite}; }
+  .koe-row .koe-copy:hover { color: ${palette.ink}; }
 
   /* A part sliding into its seat. Set --dx/--dy on the element. */
   @keyframes koe-assemble {

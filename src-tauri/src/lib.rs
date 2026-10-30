@@ -184,6 +184,12 @@ fn download_models(app: tauri::AppHandle, target: String) -> Result<(), String> 
     models::open_download(&app, &target)
 }
 
+/// Copy a past dictation to the clipboard, privately (Home history's copy button).
+#[tauri::command]
+fn copy_text(text: String) {
+    paste::copy_private(&text);
+}
+
 /// Open a model's official page in the browser.
 #[tauri::command]
 fn open_model_card(file: String) -> Result<(), String> {
@@ -335,6 +341,7 @@ pub fn run() {
             get_models,
             download_models,
             open_model_card,
+            copy_text,
             restart_app
         ])
         .setup(|app| {
