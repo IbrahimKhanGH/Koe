@@ -75,12 +75,33 @@ fn build_overlay(app: &tauri::App) -> tauri::Result<WebviewWindow> {
 }
 
 fn build_hub(app: &tauri::App) -> tauri::Result<WebviewWindow> {
-    WebviewWindowBuilder::new(app, HUB_LABEL, WebviewUrl::App("index.html".into()))
+    let hub = WebviewWindowBuilder::new(app, HUB_LABEL, WebviewUrl::App("index.html".into()))
         .title("Koe")
         .inner_size(1120.0, 760.0)
         .min_inner_size(900.0, 600.0)
         .visible(true)
-        .build()
+        .build()?;
+    // The close button hides the Hub instead of destroying it. Koe keeps running
+    // in the menu bar either way, and a destroyed Hub could never be brought back
+    // (the tray's "Open Koe" and the Dock icon both look for this window), which
+    // left quitting — and losing the in-memory history — as the only way back in.
+    let h = hub.clone();
+    hub.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = h.hide();
+        }
+    });
+    Ok(hub)
+}
+
+/// Bring the Hub back to the front (tray "Open Koe", clicking the Dock icon).
+fn show_hub(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window(HUB_LABEL) {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
 }
 
 #[tauri::command]
@@ -381,12 +402,7 @@ pub fn run() {
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
-                    "open" => {
-                        if let Some(w) = app.get_webview_window(HUB_LABEL) {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
-                    }
+                    "open" => show_hub(app),
                     "quit" => app.exit(0),
                     _ => {}
                 });
@@ -394,6 +410,15 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Koe");
+        .build(tauri::generate_context!())
+        .expect("error while building Koe")
+        .run(|app, event| {
+            // Clicking Koe in the Dock after closing its window reopens the Hub.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                show_hub(app);
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }

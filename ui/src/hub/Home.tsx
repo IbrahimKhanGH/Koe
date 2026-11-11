@@ -327,9 +327,15 @@ export function Home({ hotkey }: { hotkey: string }) {
     const load = () => getHistory().then((h) => alive && setHistory(h));
     load();
     const id = setInterval(load, 4000);
+    // Closing the window only hides it, and hidden timers get throttled — so
+    // reload the moment it comes back rather than up to a poll late.
+    window.addEventListener("focus", load);
+    document.addEventListener("visibilitychange", load);
     return () => {
       alive = false;
       clearInterval(id);
+      window.removeEventListener("focus", load);
+      document.removeEventListener("visibilitychange", load);
     };
   }, []);
 
