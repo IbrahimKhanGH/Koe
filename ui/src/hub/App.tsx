@@ -11,7 +11,6 @@ import { Help } from "./Help";
 import { PrivacyPane } from "./PrivacyPane";
 import { Icon } from "./icons";
 import { Button, Eyebrow } from "./ui";
-import { prettyAccelerator } from "./format";
 import {
   getSettings,
   setSettings,
@@ -245,7 +244,7 @@ export function App() {
         <Sidebar page={page} setPage={setPage} />
         <main style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
           <div key={page} className="koe-rise" style={{ padding: "40px 48px 56px", maxWidth: 1040 }}>
-            {page === "home" && <Home hotkey={prettyAccelerator(settings.hands_free_hotkey) } />}
+            {page === "home" && <Home hold={settings.hold_hotkey ?? ""} toggle={settings.hands_free_hotkey ?? ""} />}
             {page === "dictionary" && <DictionaryPane />}
             {page === "models" && <ModelsPane settings={settings} onChange={update} />}
             {page === "settings" && (
@@ -257,7 +256,7 @@ export function App() {
                 onOpenPrivacy={() => setPage("privacy")}
               />
             )}
-            {page === "help" && <Help />}
+            {page === "help" && <Help hold={settings.hold_hotkey ?? ""} toggle={settings.hands_free_hotkey ?? ""} />}
             {page === "privacy" && <PrivacyPane />}
           </div>
         </main>

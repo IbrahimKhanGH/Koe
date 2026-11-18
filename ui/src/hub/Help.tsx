@@ -3,14 +3,23 @@ import type { ReactNode } from "react";
 import { font, palette } from "../tokens/values";
 import { theme } from "./theme";
 import { Key, PageTitle } from "./ui";
+import { prettyAccelerator } from "./format";
 
-const TOPICS: { title: string; body: ReactNode }[] = [
+// `hold` and `toggle` are the current bindings, so the page names the keys the
+// reader actually has. Either may be empty (turned off).
+const topics = (hold: string, toggle: string): { title: string; body: ReactNode }[] => [
   {
     title: "Push to talk",
     body: (
       <>
-        Hold <Key>fn</Key>, speak, release. Your words are cleaned up on-device and typed wherever the cursor
-        is — mail, chat, docs, code.
+        {hold.trim() ? (
+          <>
+            Hold <Key>{prettyAccelerator(hold)}</Key>, speak, release.
+          </>
+        ) : (
+          <>Pick a hold key in Settings, then hold it, speak, release.</>
+        )}{" "}
+        Your words are cleaned up on-device and typed wherever the cursor is — mail, chat, docs, code.
       </>
     ),
   },
@@ -18,8 +27,21 @@ const TOPICS: { title: string; body: ReactNode }[] = [
     title: "Hands-free",
     body: (
       <>
-        Press the toggle shortcut (<Key>⌘ ⇧ Space</Key> unless you changed it) or double-tap <Key>fn</Key> to
-        start; press it again to stop and paste. Change the shortcut in Settings.
+        {toggle.trim() ? (
+          <>
+            Press the toggle shortcut (<Key>{prettyAccelerator(toggle)}</Key>)
+          </>
+        ) : (
+          <>Set a toggle shortcut in Settings and press it</>
+        )}
+        {hold.trim() && (
+          <>
+            {" "}
+            or double-tap <Key>{prettyAccelerator(hold)}</Key>
+          </>
+        )}{" "}
+        to start; press it again to stop and paste. Both can be a keyboard shortcut or a mouse button; change
+        them in Settings.
       </>
     ),
   },
@@ -73,14 +95,14 @@ const TOPICS: { title: string; body: ReactNode }[] = [
   },
 ];
 
-export function Help() {
+export function Help({ hold, toggle }: { hold: string; toggle: string }) {
   return (
     <div style={{ maxWidth: 820 }}>
       <PageTitle index={5} eyebrow="Help" sub="Everything Koe does, on one page.">
         How it works
       </PageTitle>
       <ol style={{ listStyle: "none", padding: 0, margin: 0 }}>
-        {TOPICS.map((t, i) => (
+        {topics(hold, toggle).map((t, i) => (
           <li
             key={t.title}
             style={{

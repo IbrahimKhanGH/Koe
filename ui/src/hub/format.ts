@@ -67,13 +67,19 @@ const ACCELERATOR_SYMBOLS: Record<string, string> = {
   Shift: "⇧",
 };
 
-// "CmdOrCtrl+Shift+Space" -> "⌘ ⇧ Space"; empty -> "Off".
+// One part of a binding: a modifier symbol, "fn", a mouse button, or the key.
+function prettyPart(part: string): string {
+  if (part === "Fn") return "fn";
+  const mouse = /^Mouse(\d+)$/.exec(part);
+  if (mouse) return mouse[1] === "3" ? "Middle click" : `Mouse ${mouse[1]}`;
+  return ACCELERATOR_SYMBOLS[part] ?? part;
+}
+
+// "CmdOrCtrl+Shift+Space" -> "⌘ ⇧ Space"; "Mouse4" -> "Mouse 4"; "Fn" -> "fn";
+// empty -> "Off".
 export function prettyAccelerator(accelerator: string): string {
   if (!accelerator.trim()) return "Off";
-  return accelerator
-    .split("+")
-    .map((part) => ACCELERATOR_SYMBOLS[part] ?? part)
-    .join(" ");
+  return accelerator.split("+").map(prettyPart).join(" ");
 }
 
 // Bundle id -> a readable app name: known apps by name, otherwise the id's last

@@ -10,6 +10,7 @@
 //! settings, and storage modules.
 
 pub mod asr;
+pub mod binding;
 pub mod cleanup;
 pub mod diagnostics;
 pub mod dictionary;
@@ -20,6 +21,7 @@ pub mod stats;
 pub mod types;
 
 pub use asr::{AsrEngine, AsrEngineId, Transcript};
+pub use binding::Binding;
 pub use cleanup::{CleanupContext, CleanupLevel, CleanupProvider, ProviderId, VocabEntry};
 pub use diagnostics::{Diagnostic, InjectionFailure, Platform};
 pub use dictionary::{DictSource, DictionaryEntry, DictionaryStore};

@@ -388,7 +388,8 @@ pub fn install(app: AppHandle) {
     });
     // Start the local cleanup worker.
     std::thread::spawn(|| {
-        if let Some(w) = crate::local_llm::spawn_default(current_settings_inner().cleanup_model.as_deref()) {
+        let settings = current_settings_inner();
+        if let Some(w) = crate::local_llm::spawn_default(settings.cleanup_model.as_deref(), settings.cleanup_level) {
             if let Some(slot) = LOCAL.get() {
                 *slot.lock().unwrap() = Some(w);
             }
@@ -417,6 +418,11 @@ pub fn update_settings(new: koe_core::Settings) {
 pub fn stop_dictation() {}
 pub fn cancel_dictation() {}
 pub fn trigger_hands_free() {}
+/// Custom hold bindings and binding capture are macOS-only for now: push-to-talk
+/// here is the fixed key the keyboard hook watches.
+pub fn hold_pressed() {}
+pub fn hold_released() {}
+pub fn set_binding_capture(_on: bool) {}
 
 
 pub fn stats_summary(tz_offset_minutes: i32) -> StatsSummary {

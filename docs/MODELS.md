@@ -32,7 +32,10 @@ license, or an official model page.
   rewrite. Smaller cleanup models were tested and rejected: Qwen3 1.7B left "uh"/"um"
   in and ignored self-corrections, and Qwen2.5 1.5B sometimes replied with unrelated text.
 - **Balanced** handled every test (fillers, self-corrections, spoken lists) and takes
-  about 3.5 s per cleanup on an M1 Pro, less on newer chips.
+  about 0.4 s per short cleanup on an M1 Pro, less on newer chips. The worker keeps the
+  instructions and examples every request shares already read (it warms them up at
+  launch), so each cleanup only reads the new transcript; that was ~3 s of every cleanup
+  before.
 - **Max**'s cleanup model is a mixture-of-experts: 30B parameters, of which about 3B do
   the work for each word, so it should run at a speed similar to the 4B with stronger
   rewriting. It hasn't been tested yet; try it on a 32 GB+ Mac before recommending it.

@@ -57,6 +57,23 @@ impl LocalWorker {
     }
 }
 
+impl LocalWorker {
+    /// Run one throwaway cleanup so the worker evaluates the shared system prompt
+    /// and few-shot turns now, at launch, rather than during the first dictation.
+    /// Later requests reuse that work and only evaluate their own transcript.
+    fn warm_up(&mut self, level: koe_core::cleanup::CleanupLevel) {
+        if level.bypasses_llm() {
+            return;
+        }
+        let ctx = koe_core::cleanup::CleanupContext { level, ..Default::default() };
+        let t = std::time::Instant::now();
+        match self.cleanup(&koe_core::cleanup::build_messages("okay", &ctx)) {
+            Ok(_) => eprintln!("[koe] local LLM warmed up in {:?}", t.elapsed()),
+            Err(e) => eprintln!("[koe] local LLM warm-up failed: {e}"),
+        }
+    }
+}
+
 impl Drop for LocalWorker {
     fn drop(&mut self) {
         let _ = self.child.kill();
@@ -104,13 +121,17 @@ pub fn worker_bin_path() -> Option<PathBuf> {
 
 /// Spawn the worker if the binary is present and a cleanup model verifies against
 /// models/manifest.json: the user's choice (`preferred`) if installed, otherwise
-/// the best one installed.
-pub fn spawn_default(preferred: Option<&str>) -> Option<LocalWorker> {
+/// the best one installed. It's warmed up for `level` before it's returned.
+pub fn spawn_default(
+    preferred: Option<&str>,
+    level: koe_core::cleanup::CleanupLevel,
+) -> Option<LocalWorker> {
     let bin = worker_bin_path()?;
     let found = crate::models::choose(koe_core::ModelKind::Cleanup, preferred, "[koe]")?;
     match LocalWorker::spawn(&bin, &found.path, found.spec.hybrid) {
-        Ok(w) => {
+        Ok(mut w) => {
             eprintln!("[koe] local LLM worker started ({})", bin.display());
+            w.warm_up(level);
             Some(w)
         }
         Err(e) => {

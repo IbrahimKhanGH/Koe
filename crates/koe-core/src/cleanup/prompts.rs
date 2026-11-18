@@ -47,7 +47,8 @@ opinions, greetings, sign-offs, or placeholders; summarize, shorten for style, \
 reorder ideas, or change word choice, tone, or meaning; change quantities, names, \
 numbers, dates, quoted strings, code, or URLs except for the normalizations above.
 
-FORMATTING MODE: if a \"# Formatting Mode\" section is appended below, follow its guidance on \
+FORMATTING MODE: if the message holding the dictation starts with a \"# Formatting Mode\" \
+section, follow its guidance on \
 structure, whitespace, paragraphing, and formality for the target medium. That latitude covers \
 only how the already-spoken words are presented — never invent facts, answers, greetings, or \
 sign-offs the speaker did not say, and preserve every name, number, date, quote, code, and URL.
@@ -179,23 +180,16 @@ pub fn format_mode_for_app(bundle_id: &str) -> Option<&'static str> {
     }
 }
 
-/// Assemble the final system prompt: the shared prompt, the level modifier, and
-/// (when the paste target is known) the per-app Formatting Mode.
-pub fn system_for(level: super::levels::CleanupLevel, app_bundle_id: Option<&str>) -> String {
+/// Assemble the system prompt: the shared prompt plus the level modifier. The
+/// per-app Formatting Mode is NOT here but in the final user message, so the
+/// system prompt and few-shot turns are identical for every app and the local
+/// worker can reuse their evaluated prefix instead of re-reading it each time.
+pub fn system_for_level(level: super::levels::CleanupLevel) -> String {
     let mut s = SYSTEM_PROMPT.to_string();
     let modifier = level.modifier();
     if !modifier.is_empty() {
         s.push_str("\n\n");
         s.push_str(modifier);
     }
-    if let Some(mode) = app_bundle_id.and_then(format_mode_for_app) {
-        s.push_str("\n\n# Formatting Mode (follow this for structure and tone)\n");
-        s.push_str(mode);
-    }
     s
-}
-
-/// Assemble the final system prompt for a level with no app adaptation.
-pub fn system_for_level(level: super::levels::CleanupLevel) -> String {
-    system_for(level, None)
 }

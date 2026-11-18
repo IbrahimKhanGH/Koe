@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { font, palette } from "../tokens/values";
 import { theme } from "./theme";
@@ -8,7 +8,11 @@ import {
   requestAccessibility,
   requestInputMonitoring,
   requestMicrophone,
-  setHandsFreeHotkey,
+  beginBindingCapture,
+  endBindingCapture,
+  onBindingCaptured,
+  setHotkey,
+  type HotkeyKind,
   type CleanupLevel,
   type CleanupMode,
   type Settings,
@@ -62,7 +66,8 @@ function keyNameFromCode(code: string): string | null {
 
 // A KeyboardEvent → a Tauri accelerator string ("CmdOrCtrl+Shift+Space"), or
 // null if it isn't a valid global shortcut yet (no non-modifier key, or no
-// modifier — a bare key makes a terrible global hotkey).
+// modifier — a bare letter makes a terrible global hotkey). A function key is
+// fine bare: nothing types with F13.
 function acceleratorFromEvent(e: KeyboardEvent): string | null {
   const key = keyNameFromCode(e.code);
   if (!key) return null;
@@ -71,54 +76,96 @@ function acceleratorFromEvent(e: KeyboardEvent): string | null {
   if (e.ctrlKey) parts.push("Ctrl");
   if (e.altKey) parts.push("Alt");
   if (e.shiftKey) parts.push("Shift");
-  if (parts.length === 0) return null;
+  if (parts.length === 0 && !/^F[0-9]{1,2}$/.test(key)) return null;
   parts.push(key);
   return parts.join("+");
 }
 
-// The toggle shortcut: press once to start dictating, again to stop and paste.
-// Click to record a new shortcut; the next modifier+key you press becomes it.
-// Esc while recording cancels. A combo that can't be registered (taken by macOS
-// or another app) is shown as an error and the previous one stays active.
-function ToggleShortcut({ value, onChange }: { value: string; onChange: (accelerator: string) => void }) {
+// One dictation binding, hold or toggle. Click to record a new one: the next
+// modifier+key, function key, or mouse button (middle or side) becomes it. Esc
+// or clicking away cancels. One that can't be used (taken by macOS or another
+// app, or already the other binding) is shown as an error and the previous one
+// stays active.
+function BindingRecorder({
+  which,
+  value,
+  onChange,
+}: {
+  which: HotkeyKind;
+  value: string;
+  onChange: (binding: string) => void;
+}) {
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const root = useRef<HTMLDivElement>(null);
 
   const apply = useCallback(
-    async (accelerator: string) => {
-      const problem = await setHandsFreeHotkey(accelerator);
+    async (binding: string) => {
+      const problem = await setHotkey(which, binding);
       setError(problem);
-      if (!problem) onChange(accelerator);
+      if (!problem) onChange(binding);
     },
-    [onChange],
+    [which, onChange],
   );
 
   useEffect(() => {
     if (!recording) return;
+    let live = true;
+    // Stop recording first, so the shortcuts are back in force before the new
+    // one is registered over them.
+    const finish = (binding: string | null) => {
+      if (!live) return;
+      live = false;
+      setRecording(false);
+      void endBindingCapture().then(() => {
+        if (binding !== null) void apply(binding);
+      });
+    };
     const onKeyDown = (e: KeyboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
       if (e.key === "Escape") {
-        setRecording(false);
+        finish(null);
         return;
       }
       const accelerator = acceleratorFromEvent(e);
-      if (accelerator) {
-        void apply(accelerator);
-        setRecording(false);
-      }
+      if (accelerator) finish(accelerator);
       // Otherwise a bare modifier is still held — keep listening for the key.
     };
+    const onBlur = () => finish(null);
+    // A click anywhere outside this recorder cancels it (so two can't record at
+    // once). Bindable mouse buttons never get here: they are taken natively.
+    const onMouseDown = (e: MouseEvent) => {
+      if (!root.current?.contains(e.target as Node)) finish(null);
+    };
+    let unlisten: (() => void) | undefined;
+    void beginBindingCapture();
+    void onBindingCaptured((binding) => finish(binding)).then((off) => {
+      if (live) unlisten = off;
+      else off();
+    });
     window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("mousedown", onMouseDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("mousedown", onMouseDown, true);
+      unlisten?.();
+      // Unmounted or toggled off mid-recording without a result.
+      if (live) {
+        live = false;
+        void endBindingCapture();
+      }
+    };
   }, [recording, apply]);
 
   return (
-    <div>
+    <div ref={root}>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <button
           onClick={() => setRecording((on) => !on)}
-          aria-label="Record a new toggle shortcut"
+          aria-label={which === "hold" ? "Record a new hold key" : "Record a new toggle shortcut"}
           style={{
             minWidth: 190,
             padding: "14px 18px",
@@ -135,12 +182,17 @@ function ToggleShortcut({ value, onChange }: { value: string; onChange: (acceler
             transition: "border-color 140ms, color 140ms",
           }}
         >
-          {recording ? "Press keys…" : prettyAccelerator(value)}
+          {recording ? "Press a key or button…" : prettyAccelerator(value)}
         </button>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <Button variant="ghost" size="sm" onClick={() => setRecording((on) => !on)}>
             {recording ? "Cancel" : "Change"}
           </Button>
+          {which === "hold" && value !== "Fn" && !recording && (
+            <Button variant="ghost" size="sm" onClick={() => void apply("Fn")}>
+              Use fn
+            </Button>
+          )}
           {value.trim() !== "" && !recording && (
             <Button variant="ghost" size="sm" onClick={() => void apply("")}>
               Turn off
@@ -150,7 +202,8 @@ function ToggleShortcut({ value, onChange }: { value: string; onChange: (acceler
       </div>
       {recording && (
         <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 12 }}>
-          Hold a modifier (<Key>⌘</Key> <Key>⌥</Key> <Key>⌃</Key> <Key>⇧</Key>) and press a key. <Key>esc</Key> cancels.
+          Hold a modifier (<Key>⌘</Key> <Key>⌥</Key> <Key>⌃</Key> <Key>⇧</Key>) and press a key, press a function
+          key, or click a middle or side mouse button. <Key>esc</Key> cancels.
         </div>
       )}
       {error && (
@@ -264,21 +317,29 @@ export function SettingsPane({
 
       <Row
         index={1}
-        title="Toggle shortcut"
-        desc={
-          <>
-            Press once to start talking with no key held, again to stop and paste. Holding <Key>fn</Key> and
-            double-tapping <Key>fn</Key> always work too.
-          </>
-        }
+        title="Hold to talk"
+        desc="Hold it down while you speak; let go to stop and paste. A key, a shortcut, or a mouse button."
       >
-        <ToggleShortcut
-          value={settings.hands_free_hotkey ?? ""}
-          onChange={(accelerator) => onChange({ ...settings, hands_free_hotkey: accelerator })}
+        <BindingRecorder
+          which="hold"
+          value={settings.hold_hotkey ?? ""}
+          onChange={(binding) => onChange({ ...settings, hold_hotkey: binding })}
         />
       </Row>
 
-      <Row index={2} title="Cleanup engine" desc="How your words are tidied before they're typed.">
+      <Row
+        index={2}
+        title="Toggle shortcut"
+        desc="Press once to start talking with nothing held, again to stop and paste. Double-tapping the hold key does the same."
+      >
+        <BindingRecorder
+          which="toggle"
+          value={settings.hands_free_hotkey ?? ""}
+          onChange={(binding) => onChange({ ...settings, hands_free_hotkey: binding })}
+        />
+      </Row>
+
+      <Row index={3} title="Cleanup engine" desc="How your words are tidied before they're typed.">
         <Segmented
           options={MODES.map((m) => ({ value: m.value, label: m.label }))}
           value={settings.cleanup_mode}
@@ -287,11 +348,11 @@ export function SettingsPane({
         <div style={{ fontSize: 12.5, color: theme.textMuted, marginTop: 10 }}>{mode?.hint}</div>
       </Row>
 
-      <Row index={3} title="Cleanup level" desc="How much the local model is allowed to change.">
+      <Row index={4} title="Cleanup level" desc="How much the local model is allowed to change.">
         <LevelList value={settings.cleanup_level} onChange={(v) => onChange({ ...settings, cleanup_level: v })} />
       </Row>
 
-      <Row index={4} title="Sound" desc="A short tone when recording starts.">
+      <Row index={5} title="Sound" desc="A short tone when recording starts.">
         <Segmented
           options={[
             { value: "on", label: "On" },
@@ -302,12 +363,12 @@ export function SettingsPane({
         />
       </Row>
 
-      <Row index={5} title="Permissions" desc="macOS asks for these once. The marks update by themselves within a few seconds.">
+      <Row index={6} title="Permissions" desc="macOS asks for these once. The marks update by themselves within a few seconds.">
         <div style={{ borderBottom: `1px solid ${theme.rule}` }}>
           <Permission
             ok={status.accessibility}
             label="Accessibility"
-            detail="Sees the fn key in every app and types your words."
+            detail="Sees your dictation keys in every app and types your words."
             onGrant={() => {
               requestAccessibility();
               setTimeout(refresh, 800);
@@ -338,7 +399,7 @@ export function SettingsPane({
         </div>
       </Row>
 
-      <Row index={6} title="Privacy" desc="Where your voice goes, what's stored, and how to check it yourself.">
+      <Row index={7} title="Privacy" desc="Where your voice goes, what's stored, and how to check it yourself.">
         <Button variant="ghost" onClick={onOpenPrivacy}>
           How Koe keeps everything on this Mac →
         </Button>

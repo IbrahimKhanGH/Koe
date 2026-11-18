@@ -5,10 +5,12 @@ import { Card, Eyebrow, Key, inputStyle, useStats } from "./ui";
 import { Assembly, Thread, WovenGrid } from "./motifs";
 import { Icon } from "./icons";
 import { copyText, getHistory, type HistoryItem, type StatsSummary } from "./api";
-import { appName, dayKey, dayLabel, fmtCompact, fmtDuration, fmtNum, fmtTimeOfDay } from "./format";
+import { appName, dayKey, dayLabel, fmtCompact, fmtDuration, fmtNum, fmtTimeOfDay, prettyAccelerator } from "./format";
 
 // ── Header ───────────────────────────────────────────────────────────────────
-function Header({ hotkey }: { hotkey: string }) {
+function Header({ hold, toggle }: { hold: string; toggle: string }) {
+  const holdKey = hold.trim() ? <Key>{prettyAccelerator(hold)}</Key> : null;
+  const toggleKey = toggle.trim() ? <Key>{prettyAccelerator(toggle)}</Key> : null;
   return (
     <header style={{ marginBottom: 30 }}>
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 32 }}>
@@ -30,7 +32,10 @@ function Header({ hotkey }: { hotkey: string }) {
             <span style={{ color: theme.textFaint }}>It's written.</span>
           </h1>
           <p style={{ color: theme.textMuted, fontSize: 14, lineHeight: 2, margin: "16px 0 0" }}>
-            Hold <Key>fn</Key> and talk, or press <Key>{hotkey}</Key> to start and stop.
+            {holdKey && toggleKey && <>Hold {holdKey} and talk, or press {toggleKey} to start and stop.</>}
+            {holdKey && !toggleKey && <>Hold {holdKey} and talk.</>}
+            {!holdKey && toggleKey && <>Press {toggleKey} to start and stop.</>}
+            {!holdKey && !toggleKey && <>Pick a hold or toggle shortcut in Settings to start.</>}
             <br />
             Clean text lands wherever your cursor is.
           </p>
@@ -318,7 +323,7 @@ function History({ history }: { history: HistoryItem[] }) {
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
-export function Home({ hotkey }: { hotkey: string }) {
+export function Home({ hold, toggle }: { hold: string; toggle: string }) {
   const stats = useStats();
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
@@ -341,7 +346,7 @@ export function Home({ hotkey }: { hotkey: string }) {
 
   return (
     <div>
-      <Header hotkey={hotkey} />
+      <Header hold={hold} toggle={toggle} />
       <Figures stats={stats} />
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(240px, 1fr)", gap: 20, alignItems: "start" }}>
         <History history={history} />

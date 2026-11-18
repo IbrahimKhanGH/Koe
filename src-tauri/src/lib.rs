@@ -112,9 +112,9 @@ fn get_settings() -> koe_core::Settings {
 #[tauri::command]
 fn set_settings(app: tauri::AppHandle, settings: koe_core::Settings) {
     hotkey::update_settings(settings);
-    // The hands-free hotkey may have changed — re-register it from the new
-    // settings so a customized combo takes effect without a relaunch.
-    apply_hands_free_shortcut(&app);
+    // The hold or toggle binding may have changed — re-register from the new
+    // settings so it takes effect without a relaunch.
+    apply_bindings(&app);
 }
 
 /// Stop and finalize the current recording — the overlay pill's red Stop button.
@@ -287,38 +287,86 @@ fn request_input_monitoring(app: tauri::AppHandle) {
     }
 }
 
-/// (Re)register the customizable hands-free global hotkey from the current
-/// settings — press once to start hands-free dictation, again to stop. Called at
-/// startup and whenever settings change. Best-effort: an unregisterable or empty
-/// accelerator just leaves the hotkey off (Fn push-to-talk and double-tap-Fn
-/// hands-free still work), never a crash.
-fn apply_hands_free_shortcut(app: &tauri::AppHandle) {
-    let accelerator = hotkey::current_settings().hands_free_hotkey;
-    if let Err(e) = register_hands_free(app, &accelerator) {
-        eprintln!("[koe] hands-free hotkey '{accelerator}' could not be registered: {e}");
+/// The global-shortcut ids of the (hold, toggle) bindings when they are
+/// keyboard shortcuts, so the plugin's handler can tell which one fired. A
+/// binding on Fn or a mouse button is `None` here: `hotkey` watches those.
+static KEY_BINDING_IDS: std::sync::Mutex<(Option<u32>, Option<u32>)> =
+    std::sync::Mutex::new((None, None));
+
+fn parse_shortcut(accelerator: &str) -> Result<tauri_plugin_global_shortcut::Shortcut, String> {
+    accelerator
+        .parse::<tauri_plugin_global_shortcut::Shortcut>()
+        .map_err(|e| e.to_string())
+}
+
+/// (Re)register the hold and toggle bindings from the current settings. Called
+/// at startup and whenever settings change. Best-effort: a binding that can't
+/// be registered is left off, never a crash.
+fn apply_bindings(app: &tauri::AppHandle) {
+    let settings = hotkey::current_settings();
+    if let Err(e) = register_bindings(app, &settings.hold_hotkey, &settings.hands_free_hotkey) {
+        eprintln!("[koe] a dictation shortcut could not be registered: {e}");
     }
 }
 
-/// Make `accelerator` the one registered hands-free hotkey (empty = none).
-fn register_hands_free(app: &tauri::AppHandle, accelerator: &str) -> Result<(), String> {
+/// Make `hold` and `toggle` the registered keyboard shortcuts. Only bindings
+/// that are keyboard shortcuts are registered here; Fn and mouse buttons are
+/// read from settings by the event taps in `hotkey`.
+fn register_bindings(app: &tauri::AppHandle, hold: &str, toggle: &str) -> Result<(), String> {
+    use koe_core::Binding;
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
     let global_shortcut = app.global_shortcut();
     let _ = global_shortcut.unregister_all();
-    if accelerator.trim().is_empty() {
-        return Ok(());
+    let mut ids = KEY_BINDING_IDS.lock().unwrap();
+    *ids = (None, None);
+    if let Binding::Keys(accelerator) = Binding::parse(hold) {
+        let shortcut = parse_shortcut(&accelerator)?;
+        global_shortcut.register(shortcut).map_err(|e| e.to_string())?;
+        ids.0 = Some(shortcut.id());
     }
-    global_shortcut.register(accelerator).map_err(|e| e.to_string())
+    if let Binding::Keys(accelerator) = Binding::parse(toggle) {
+        let shortcut = parse_shortcut(&accelerator)?;
+        global_shortcut.register(shortcut).map_err(|e| e.to_string())?;
+        ids.1 = Some(shortcut.id());
+    }
+    Ok(())
 }
 
-/// Change the hands-free (toggle) hotkey from Settings. The new combo is
-/// registered before it is saved, so one that's invalid or already taken by
-/// macOS or another app is reported back, and the previous shortcut keeps working.
+/// Whether two bindings are the same trigger. Keyboard shortcuts are compared
+/// as parsed, so "Cmd+Shift+Space" and "Shift+CmdOrCtrl+Space" count as equal.
+fn same_binding(a: &str, b: &str) -> bool {
+    use koe_core::Binding;
+    match (Binding::parse(a), Binding::parse(b)) {
+        (Binding::Off, _) | (_, Binding::Off) => false,
+        (Binding::Keys(a), Binding::Keys(b)) => match (parse_shortcut(&a), parse_shortcut(&b)) {
+            (Ok(a), Ok(b)) => a.id() == b.id(),
+            _ => false,
+        },
+        (a, b) => a == b,
+    }
+}
+
+/// Change the hold (`which` = "hold") or toggle ("toggle") binding from
+/// Settings. `binding` is a keyboard shortcut, a mouse button, "Fn", or empty
+/// for off. It is registered before it is saved, so one that's invalid or
+/// already taken by macOS or another app is reported back, and the previous
+/// bindings keep working.
 #[tauri::command]
-fn set_hands_free_hotkey(app: tauri::AppHandle, accelerator: String) -> Result<(), String> {
-    let mut settings = hotkey::current_settings();
-    let previous = std::mem::replace(&mut settings.hands_free_hotkey, accelerator);
-    if let Err(e) = register_hands_free(&app, &settings.hands_free_hotkey) {
-        let _ = register_hands_free(&app, &previous);
+fn set_hotkey(app: tauri::AppHandle, which: String, binding: String) -> Result<(), String> {
+    let previous = hotkey::current_settings();
+    let mut settings = previous.clone();
+    let binding = binding.trim().to_string();
+    match which.as_str() {
+        "hold" => settings.hold_hotkey = binding,
+        "toggle" => settings.hands_free_hotkey = binding,
+        other => return Err(format!("Unknown binding '{other}'.")),
+    }
+    if same_binding(&settings.hold_hotkey, &settings.hands_free_hotkey) {
+        let other = if which == "hold" { "toggle" } else { "hold" };
+        return Err(format!("That's already your {other} binding. Pick a different one."));
+    }
+    if let Err(e) = register_bindings(&app, &settings.hold_hotkey, &settings.hands_free_hotkey) {
+        let _ = register_bindings(&app, &previous.hold_hotkey, &previous.hands_free_hotkey);
         return Err(format!(
             "Couldn't use that shortcut ({e}). It may already belong to macOS or another app — try a different one."
         ));
@@ -327,17 +375,43 @@ fn set_hands_free_hotkey(app: tauri::AppHandle, accelerator: String) -> Result<(
     Ok(())
 }
 
+/// Settings started recording a new binding. The current keyboard shortcuts are
+/// released so the recorder can see those keys, and the next mouse button
+/// pressed is reported to the Hub (`koe://binding/captured`) instead of acted on.
+#[tauri::command]
+fn begin_binding_capture(app: tauri::AppHandle) {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let _ = app.global_shortcut().unregister_all();
+    *KEY_BINDING_IDS.lock().unwrap() = (None, None);
+    hotkey::set_binding_capture(true);
+}
+
+/// Settings stopped recording: put the saved bindings back in force.
+#[tauri::command]
+fn end_binding_capture(app: tauri::AppHandle) {
+    hotkey::set_binding_capture(false);
+    apply_bindings(&app);
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(
-            // The customizable hands-free hotkey lives here — the OS registers the
-            // chord, so pressing it fires our handler AND is suppressed from the
-            // focused app (a listen-only CGEvent tap could not consume a printable
-            // key like Space). Only the hands-free shortcut is ever registered, so
-            // any Pressed event is a hands-free toggle.
+            // Hold and toggle bindings that are keyboard shortcuts live here — the
+            // OS registers the chord, so pressing it fires our handler AND is
+            // suppressed from the focused app (a listen-only CGEvent tap could not
+            // consume a printable key like Space). The hold binding starts on
+            // press and finishes on release; the toggle acts on press only.
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|_app, _shortcut, event| {
-                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                .with_handler(|_app, shortcut, event| {
+                    use tauri_plugin_global_shortcut::ShortcutState;
+                    let (hold, toggle) = *KEY_BINDING_IDS.lock().unwrap();
+                    let id = Some(shortcut.id());
+                    if id == hold {
+                        match event.state() {
+                            ShortcutState::Pressed => hotkey::hold_pressed(),
+                            ShortcutState::Released => hotkey::hold_released(),
+                        }
+                    } else if id == toggle && event.state() == ShortcutState::Pressed {
                         hotkey::trigger_hands_free();
                     }
                 })
@@ -358,7 +432,9 @@ pub fn run() {
             request_microphone,
             request_accessibility,
             request_input_monitoring,
-            set_hands_free_hotkey,
+            set_hotkey,
+            begin_binding_capture,
+            end_binding_capture,
             get_models,
             download_models,
             open_model_card,
@@ -375,11 +451,12 @@ pub fn run() {
             let _ = hub.show();
             let _ = hub.set_focus();
 
-            // Wire the Fn key to the pill via the real state machine.
+            // Wire the dictation bindings to the pill via the real state machine.
             hotkey::install(app.handle().clone());
 
-            // Register the customizable hands-free hotkey (default Cmd+Shift+Space).
-            apply_hands_free_shortcut(app.handle());
+            // Register the keyboard-shortcut bindings (toggle defaults to
+            // Cmd+Shift+Space; hold defaults to Fn, which needs no registering).
+            apply_bindings(app.handle());
 
             // Keep the permission rows honest without the Hub having to be awake
             // to ask. This is what makes the setup screen's promise ("turns green

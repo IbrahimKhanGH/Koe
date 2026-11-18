@@ -109,7 +109,7 @@ pub fn build_messages(raw: &str, ctx: &CleanupContext) -> Vec<CleanupMsg> {
     let mut msgs = Vec::with_capacity(prompts::FEW_SHOT.len() * 2 + 2);
     msgs.push(CleanupMsg {
         role: "system",
-        content: prompts::system_for(ctx.level, ctx.app_bundle_id.as_deref()),
+        content: prompts::system_for_level(ctx.level),
     });
     for (input, output) in prompts::FEW_SHOT {
         msgs.push(CleanupMsg { role: "user", content: wrap_transcript(input) });
@@ -124,6 +124,11 @@ pub fn build_messages(raw: &str, ctx: &CleanupContext) -> Vec<CleanupMsg> {
 /// content. Providers wrap this in their own message envelope.
 pub fn assemble_user_message(raw: &str, ctx: &CleanupContext) -> String {
     let mut out = String::new();
+    if let Some(mode) = ctx.app_bundle_id.as_deref().and_then(prompts::format_mode_for_app) {
+        out.push_str("# Formatting Mode (follow this for structure and tone)\n");
+        out.push_str(mode);
+        out.push_str("\n\n");
+    }
     if !ctx.vocab.is_empty() {
         out.push_str(
             "# Custom Vocabulary\nUse these as the spelling authority; replace phonetically \
@@ -350,6 +355,19 @@ mod tests {
         assert!(msg.contains("<CUSTOM_VOCABULARY>"));
         assert!(msg.contains("Manvi"));
         assert!(msg.contains("<USER_MESSAGE>\nsend it to monvi\n</USER_MESSAGE>"));
+    }
+
+    #[test]
+    fn only_the_last_message_depends_on_the_app() {
+        // The local worker reuses the evaluated prefix of the previous request, so
+        // everything before the transcript must be the same in every app.
+        let plain = build_messages("hi", &CleanupContext::default());
+        let ctx = CleanupContext { app_bundle_id: Some("com.apple.mail".into()), ..Default::default() };
+        let mail = build_messages("hi", &ctx);
+        assert_eq!(plain[..plain.len() - 1], mail[..mail.len() - 1]);
+        assert!(mail.last().unwrap().content.starts_with("# Formatting Mode"));
+        assert!(mail.last().unwrap().content.contains("EMAIL"));
+        assert!(!plain.last().unwrap().content.contains("Formatting Mode"));
     }
 
     #[test]

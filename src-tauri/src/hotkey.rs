@@ -1,7 +1,13 @@
-//! The macOS dictation pipeline. An in-process CoreGraphics event tap feeds Fn
-//! key-down / key-up (and the toggle shortcut) into the [`koe_core`] state
-//! machine; its actions drive mic capture, Whisper transcription, on-device
-//! cleanup, the paste, and the `koe://flowbar/state` events the pill renders.
+//! The macOS dictation pipeline. The hold (push-to-talk) and toggle (hands-free)
+//! bindings feed the [`koe_core`] state machine; its actions drive mic capture,
+//! Whisper transcription, on-device cleanup, the paste, and the
+//! `koe://flowbar/state` events the pill renders.
+//!
+//! Each binding is the Fn key, a keyboard shortcut, or a mouse button (see
+//! [`koe_core::binding`]). Fn comes from a listen-only CoreGraphics event tap
+//! here, mouse buttons from a second tap that swallows the bound button, and
+//! keyboard shortcuts from the global-shortcut plugin in `lib.rs`, which calls
+//! [`hold_pressed`] / [`hold_released`] / [`trigger_hands_free`].
 
 /// Dictionary entry shape sent to the Hub UI (auto-learned entries flagged).
 #[derive(Clone, serde::Serialize)]
@@ -17,13 +23,14 @@ mod imp {
     use std::path::PathBuf;
     use super::DictEntryDto;
     use std::ptr::{null, null_mut};
-    use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicI64, AtomicPtr, AtomicU32, Ordering};
     use std::sync::{Arc, Mutex, OnceLock};
     use std::time::{Duration, Instant};
 
     use serde::Serialize;
     use tauri::{AppHandle, Emitter};
     use koe_core::state::{Action, BarState};
+    use koe_core::binding::{Binding, Mods};
     use koe_core::{
         AsrEngine, CleanupContext, CleanupMode, Input, ModelKind, PipelineEvent, StateMachine,
         TriggerToken,
@@ -31,6 +38,7 @@ mod imp {
     use koe_ipc::BindingId;
 
     const OVERLAY_LABEL: &str = "koe_bar";
+    const HUB_LABEL: &str = "main";
 
     // --- CoreGraphics / CoreFoundation FFI (listen-only Fn tap) -----------
     type CFMachPortRef = *mut c_void;
@@ -74,6 +82,19 @@ mod imp {
     const K_CG_SESSION_EVENT_TAP: u32 = 1;
     const K_CG_HEAD_INSERT: u32 = 0;
     const K_CG_TAP_OPTION_LISTEN_ONLY: u32 = 1;
+    /// An active tap: its callback may drop an event by returning null.
+    const K_CG_TAP_OPTION_DEFAULT: u32 = 0;
+    // Every mouse button past left and right arrives as an "other" mouse event.
+    const K_CG_EVENT_OTHER_MOUSE_DOWN: u32 = 25;
+    const K_CG_EVENT_OTHER_MOUSE_UP: u32 = 26;
+    const MOUSE_EVENTS_OF_INTEREST: u64 =
+        (1 << K_CG_EVENT_OTHER_MOUSE_DOWN) | (1 << K_CG_EVENT_OTHER_MOUSE_UP);
+    /// Zero-based: 2 is the middle button, 3 and 4 the side buttons.
+    const K_CG_MOUSE_EVENT_BUTTON_NUMBER: u32 = 3;
+    const FLAG_SHIFT: u64 = 0x0002_0000;
+    const FLAG_CONTROL: u64 = 0x0004_0000;
+    const FLAG_ALTERNATE: u64 = 0x0008_0000;
+    const FLAG_COMMAND: u64 = 0x0010_0000;
     const K_CG_EVENT_FLAGS_CHANGED: u32 = 12;
     const EVENTS_OF_INTEREST: u64 = 1 << K_CG_EVENT_FLAGS_CHANGED;
     const FLAG_SECONDARY_FN: u64 = 0x0080_0000;
@@ -87,6 +108,20 @@ mod imp {
     static CLOCK: OnceLock<Instant> = OnceLock::new();
     static FN_IS_DOWN: AtomicBool = AtomicBool::new(false);
     static TAP_PORT: AtomicPtr<c_void> = AtomicPtr::new(null_mut());
+    static MOUSE_TAP_PORT: AtomicPtr<c_void> = AtomicPtr::new(null_mut());
+    /// The (hold, toggle) bindings, parsed from settings whenever they change.
+    static BINDINGS: Mutex<(Binding, Binding)> = Mutex::new((Binding::Off, Binding::Off));
+    /// Whether the hold binding is down right now, whichever device it is on.
+    static HOLD_IS_DOWN: AtomicBool = AtomicBool::new(false);
+    /// Settings is recording a new binding: the next mouse button pressed is
+    /// reported to the Hub instead of acted on.
+    static CAPTURING: AtomicBool = AtomicBool::new(false);
+    /// Mouse buttons (one bit per CoreGraphics button number) whose press we
+    /// swallowed, so the matching release is swallowed too and the app under
+    /// the cursor never sees half a click.
+    static MOUSE_SWALLOWED: AtomicU32 = AtomicU32::new(0);
+    /// The CoreGraphics button currently held as the hold binding, or -1.
+    static MOUSE_HOLD_BUTTON: AtomicI64 = AtomicI64::new(-1);
     /// Set once at startup if no Whisper model file exists on disk at all —
     /// distinct from "still loading", so the finalize path only shows the
     /// user a loud "no speech model" error for the real case, not a race
@@ -117,6 +152,10 @@ mod imp {
         text: String,
     }
 
+    #[derive(Clone, Serialize)]
+    struct CapturedPayload {
+        binding: String,
+    }
 
     fn support_dir() -> PathBuf {
         let home = std::env::var("HOME").unwrap_or_default();
@@ -224,9 +263,21 @@ mod imp {
     /// Apply and persist new settings.
     pub fn update_settings(new: koe_core::Settings) {
         let _ = new.save(&settings_path());
+        load_bindings(&new);
         if let Some(m) = SETTINGS.get() {
             *m.lock().unwrap() = new;
         }
+    }
+
+    fn load_bindings(settings: &koe_core::Settings) {
+        *BINDINGS.lock().unwrap() = (
+            Binding::parse(&settings.hold_hotkey),
+            Binding::parse(&settings.hands_free_hotkey),
+        );
+    }
+
+    fn bindings() -> (Binding, Binding) {
+        BINDINGS.lock().unwrap().clone()
     }
 
     /// Clean a raw transcript per the current settings (mode + level), feeding in the
@@ -498,26 +549,136 @@ mod imp {
                 let flags = unsafe { CGEventGetFlags(event) };
                 let down = (flags & FLAG_SECONDARY_FN) != 0;
                 let was_down = FN_IS_DOWN.swap(down, Ordering::SeqCst);
-                let at_ms = now_ms();
+                // Fn only dictates while it is the bound key. Rebinding hold to
+                // something else frees Fn for whatever macOS does with it.
+                let (hold, toggle) = bindings();
                 if down && !was_down {
-                    eprintln!("[koe] Fn DOWN");
-                    // Snapshot the paste target now, while the user's app is focused.
-                    let target = crate::appctx::frontmost_bundle_id();
-                    *TARGET_APP.get_or_init(|| Mutex::new(None)).lock().unwrap() = target;
-                    handle_input(Input::Trigger(TriggerToken::Down {
-                        binding: BindingId::PushToTalk,
-                        at_ms,
-                    }));
-                } else if !down && was_down {
-                    eprintln!("[koe] Fn UP");
-                    handle_input(Input::Trigger(TriggerToken::Up {
-                        binding: BindingId::PushToTalk,
-                        at_ms,
-                    }));
+                    if hold == Binding::Fn {
+                        hold_pressed();
+                    } else if toggle == Binding::Fn {
+                        trigger_hands_free();
+                    }
+                } else if !down && was_down && hold == Binding::Fn {
+                    hold_released();
                 }
             }
         }
         event
+    }
+
+    fn mods_from_flags(flags: u64) -> Mods {
+        Mods {
+            cmd: flags & FLAG_COMMAND != 0,
+            ctrl: flags & FLAG_CONTROL != 0,
+            alt: flags & FLAG_ALTERNATE != 0,
+            shift: flags & FLAG_SHIFT != 0,
+        }
+    }
+
+    /// The mouse-button tap. Unlike the Fn tap this one is active: a button that
+    /// is bound (or being recorded in Settings) is dropped by returning null, so
+    /// a side button held to dictate doesn't also navigate Back in the browser.
+    /// Every other click passes through untouched.
+    extern "C" fn mouse_tap_callback(
+        _proxy: CGEventTapProxy,
+        etype: u32,
+        event: CGEventRef,
+        _info: *mut c_void,
+    ) -> CGEventRef {
+        if etype == K_CG_TAP_DISABLED_BY_TIMEOUT || etype == K_CG_TAP_DISABLED_BY_USER_INPUT {
+            let port = MOUSE_TAP_PORT.load(Ordering::SeqCst);
+            if !port.is_null() {
+                unsafe { CGEventTapEnable(port, true) };
+            }
+            return event;
+        }
+        if etype != K_CG_EVENT_OTHER_MOUSE_DOWN && etype != K_CG_EVENT_OTHER_MOUSE_UP {
+            return event;
+        }
+        let cg_button =
+            unsafe { CGEventGetIntegerValueField(event, K_CG_MOUSE_EVENT_BUTTON_NUMBER) };
+        // CoreGraphics counts from zero; bindings count the way mice are sold.
+        let button = cg_button + 1;
+        if button < koe_core::binding::MOUSE_BUTTON_MIN as i64
+            || button > koe_core::binding::MOUSE_BUTTON_MAX as i64
+        {
+            return event;
+        }
+        let button = button as u8;
+        let bit = 1u32 << cg_button;
+
+        if etype == K_CG_EVENT_OTHER_MOUSE_UP {
+            if MOUSE_SWALLOWED.fetch_and(!bit, Ordering::SeqCst) & bit == 0 {
+                return event;
+            }
+            if MOUSE_HOLD_BUTTON
+                .compare_exchange(cg_button, -1, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                hold_released();
+            }
+            return null_mut();
+        }
+
+        let mods = mods_from_flags(unsafe { CGEventGetFlags(event) });
+        if CAPTURING.swap(false, Ordering::SeqCst) {
+            MOUSE_SWALLOWED.fetch_or(bit, Ordering::SeqCst);
+            if let Some(app) = APP.get() {
+                let binding = Binding::mouse_string(button, mods);
+                let _ = app.emit_to(HUB_LABEL, "koe://binding/captured", CapturedPayload { binding });
+            }
+            return null_mut();
+        }
+        let pressed = Binding::Mouse { button, mods };
+        let (hold, toggle) = bindings();
+        if pressed == hold {
+            MOUSE_SWALLOWED.fetch_or(bit, Ordering::SeqCst);
+            MOUSE_HOLD_BUTTON.store(cg_button, Ordering::SeqCst);
+            hold_pressed();
+            return null_mut();
+        }
+        if pressed == toggle {
+            MOUSE_SWALLOWED.fetch_or(bit, Ordering::SeqCst);
+            trigger_hands_free();
+            return null_mut();
+        }
+        event
+    }
+
+    /// The hold binding went down: start push-to-talk. Called for whichever
+    /// device the binding is on (the Fn tap, the mouse tap, or the global
+    /// shortcut handler in `lib.rs`); repeats while it stays down are ignored.
+    pub fn hold_pressed() {
+        if HOLD_IS_DOWN.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        eprintln!("[koe] hold DOWN");
+        // Snapshot the paste target now, while the user's app is focused.
+        let target = crate::appctx::frontmost_bundle_id();
+        *TARGET_APP.get_or_init(|| Mutex::new(None)).lock().unwrap() = target;
+        handle_input(Input::Trigger(TriggerToken::Down {
+            binding: BindingId::PushToTalk,
+            at_ms: now_ms(),
+        }));
+    }
+
+    /// The hold binding was released: finish push-to-talk.
+    pub fn hold_released() {
+        if !HOLD_IS_DOWN.swap(false, Ordering::SeqCst) {
+            return;
+        }
+        eprintln!("[koe] hold UP");
+        handle_input(Input::Trigger(TriggerToken::Up {
+            binding: BindingId::PushToTalk,
+            at_ms: now_ms(),
+        }));
+    }
+
+    /// Settings started (or stopped) recording a new binding. While on, the
+    /// next mouse button pressed is sent to the Hub as `koe://binding/captured`
+    /// instead of triggering dictation.
+    pub fn set_binding_capture(on: bool) {
+        CAPTURING.store(on, Ordering::SeqCst);
     }
 
     /// Stop and finalize the current recording — the pill's red Stop button.
@@ -533,7 +694,7 @@ mod imp {
         handle_input(Input::Trigger(TriggerToken::Cancel { at_ms: now_ms() }));
     }
 
-    /// Toggle HANDS-FREE (locked) dictation — the customizable global hotkey
+    /// Toggle HANDS-FREE (locked) dictation — the customizable toggle binding
     /// (default Cmd+Shift+Space) fires this. The state machine treats a
     /// `HandsFree` press as a toggle: from idle it starts a locked session that
     /// keeps recording with no key held, and while locked it finalizes.
@@ -578,6 +739,7 @@ mod imp {
             "[koe] cleanup mode: {:?}, level: {:?}",
             settings.cleanup_mode, settings.cleanup_level
         );
+        load_bindings(&settings);
         let _ = SETTINGS.set(Mutex::new(settings));
         let _ = DICTIONARY.set(Mutex::new(dict));
         let _ = STATS.set(Mutex::new(koe_core::StatsStore::load(&stats_path())));
@@ -585,7 +747,8 @@ mod imp {
         // Start the local cleanup worker in the background (model load takes a few
         // seconds; the first local cleanup waits for it, subsequent ones are fast).
         std::thread::spawn(|| {
-            let worker = crate::local_llm::spawn_default(current_settings().cleanup_model.as_deref());
+            let settings = current_settings();
+            let worker = crate::local_llm::spawn_default(settings.cleanup_model.as_deref(), settings.cleanup_level);
             let _ = LOCAL.set(Mutex::new(worker));
         });
 
@@ -669,10 +832,33 @@ mod imp {
                 crate::diag::clear_last_error();
             }
             TAP_PORT.store(port, Ordering::SeqCst);
+            // The mouse-button tap shares this run loop. It is a separate, active
+            // tap so the Fn tap above stays listen-only; if macOS refuses it, the
+            // keyboard bindings still work and only mouse bindings are lost.
+            let mouse_port = unsafe {
+                CGEventTapCreate(
+                    K_CG_SESSION_EVENT_TAP,
+                    K_CG_HEAD_INSERT,
+                    K_CG_TAP_OPTION_DEFAULT,
+                    MOUSE_EVENTS_OF_INTEREST,
+                    mouse_tap_callback,
+                    null_mut(),
+                )
+            };
+            if mouse_port.is_null() {
+                eprintln!("[koe] mouse-button tap could not be created — mouse bindings are off");
+            } else {
+                MOUSE_TAP_PORT.store(mouse_port, Ordering::SeqCst);
+            }
             unsafe {
                 let source = CFMachPortCreateRunLoopSource(null(), port, 0);
                 CFRunLoopAddSource(CFRunLoopGetCurrent(), source, kCFRunLoopDefaultMode);
                 CGEventTapEnable(port, true);
+                if !mouse_port.is_null() {
+                    let mouse_source = CFMachPortCreateRunLoopSource(null(), mouse_port, 0);
+                    CFRunLoopAddSource(CFRunLoopGetCurrent(), mouse_source, kCFRunLoopDefaultMode);
+                    CGEventTapEnable(mouse_port, true);
+                }
                 CFRunLoopRun();
             }
         });
@@ -682,16 +868,18 @@ mod imp {
 #[cfg(target_os = "macos")]
 pub use imp::{
     cancel_dictation, current_settings, dictionary_add, dictionary_entries,
-    dictionary_remove, history, install, stats_summary, stop_dictation,
-    trigger_hands_free, update_settings,
+    dictionary_remove, history, hold_pressed, hold_released, install,
+    set_binding_capture, stats_summary, stop_dictation, trigger_hands_free,
+    update_settings,
 };
 
 // Windows uses the real (but unverified) platform layer in `crate::win`.
 #[cfg(target_os = "windows")]
 pub use crate::win::{
     cancel_dictation, current_settings, dictionary_add, dictionary_entries,
-    dictionary_remove, history, install, stats_summary, stop_dictation,
-    trigger_hands_free, update_settings,
+    dictionary_remove, history, hold_pressed, hold_released, install,
+    set_binding_capture, stats_summary, stop_dictation, trigger_hands_free,
+    update_settings,
 };
 
 // Other platforms (Linux, etc.): inert stubs so the crate still builds.
@@ -716,10 +904,14 @@ mod other {
     pub fn stop_dictation() {}
     pub fn cancel_dictation() {}
     pub fn trigger_hands_free() {}
+    pub fn hold_pressed() {}
+    pub fn hold_released() {}
+    pub fn set_binding_capture(_on: bool) {}
 }
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub use other::{
     cancel_dictation, current_settings, dictionary_add, dictionary_entries,
-    dictionary_remove, history, install, stats_summary, stop_dictation,
-    trigger_hands_free, update_settings,
+    dictionary_remove, history, hold_pressed, hold_released, install,
+    set_binding_capture, stats_summary, stop_dictation, trigger_hands_free,
+    update_settings,
 };

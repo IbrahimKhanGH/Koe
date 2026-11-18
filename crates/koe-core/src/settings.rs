@@ -28,14 +28,19 @@ pub struct Settings {
     pub cleanup_level: CleanupLevel,
     /// Play the record-start ping.
     pub sound_on_start: bool,
-    /// The global hotkey that toggles HANDS-FREE (locked) dictation — press once
-    /// to start talking, press again to stop, with no key held down. An
-    /// accelerator string in Tauri's format (e.g. "CmdOrCtrl+Shift+Space", the
-    /// default). Holding Fn (push-to-talk) and double-tapping Fn (hands-free)
-    /// still work regardless.
-    /// An empty string disables the hands-free hotkey.
+    /// The binding that toggles HANDS-FREE (locked) dictation — press once to
+    /// start talking, press again to stop, with nothing held down. A binding
+    /// string (see [`crate::binding`]): a keyboard accelerator such as
+    /// "CmdOrCtrl+Shift+Space" (the default) or a mouse button such as "Mouse4".
+    /// Double-tapping the hold binding starts hands-free too.
+    /// An empty string disables it.
     #[serde(default = "default_hands_free_hotkey")]
     pub hands_free_hotkey: String,
+    /// The binding you HOLD to talk (push-to-talk): release ends and pastes.
+    /// Same grammar as `hands_free_hotkey`, plus "Fn" (the default). An empty
+    /// string disables it.
+    #[serde(default = "default_hold_hotkey")]
+    pub hold_hotkey: String,
     /// The speech / cleanup model chosen on the Models page, as a file name from
     /// models/manifest.json. `None` means automatic: the best one installed.
     #[serde(default)]
@@ -52,6 +57,11 @@ pub fn default_hands_free_hotkey() -> String {
     "CmdOrCtrl+Shift+Space".to_string()
 }
 
+/// The out-of-the-box hold-to-talk binding: the Fn / Globe key.
+pub fn default_hold_hotkey() -> String {
+    "Fn".to_string()
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -59,6 +69,7 @@ impl Default for Settings {
             cleanup_level: CleanupLevel::Light,
             sound_on_start: true,
             hands_free_hotkey: default_hands_free_hotkey(),
+            hold_hotkey: default_hold_hotkey(),
             speech_model: None,
             cleanup_model: None,
         }
@@ -138,5 +149,26 @@ mod tests {
         custom.hands_free_hotkey = "Alt+Space".to_string();
         let back: Settings = serde_json::from_str(&serde_json::to_string(&custom).unwrap()).unwrap();
         assert_eq!(back.hands_free_hotkey, "Alt+Space");
+    }
+
+    #[test]
+    fn hold_hotkey_defaults_to_fn_and_survives_old_settings() {
+        assert_eq!(Settings::default().hold_hotkey, "Fn");
+
+        // Settings saved before the hold binding was customizable still load.
+        let old_json = r#"{
+            "cleanup_mode": "local",
+            "cleanup_level": "light",
+            "sound_on_start": true,
+            "hands_free_hotkey": "Alt+Space"
+        }"#;
+        let loaded: Settings = serde_json::from_str(old_json).unwrap();
+        assert_eq!(loaded.hold_hotkey, "Fn");
+        assert_eq!(loaded.hands_free_hotkey, "Alt+Space");
+
+        let mut custom = Settings::default();
+        custom.hold_hotkey = "Mouse4".to_string();
+        let back: Settings = serde_json::from_str(&serde_json::to_string(&custom).unwrap()).unwrap();
+        assert_eq!(back.hold_hotkey, "Mouse4");
     }
 }

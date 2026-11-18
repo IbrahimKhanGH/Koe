@@ -9,10 +9,12 @@ export interface Settings {
   cleanup_mode: CleanupMode;
   cleanup_level: CleanupLevel;
   sound_on_start: boolean;
-  // Tauri accelerator that toggles hands-free (locked) dictation — press once to
-  // start talking with no key held, again to stop. Default "CmdOrCtrl+Shift+Space".
-  // Empty disables it. (Holding Fn and double-tapping Fn always work too.)
+  // The binding that toggles hands-free (locked) dictation — press once to start
+  // talking with nothing held, again to stop. A keyboard accelerator (default
+  // "CmdOrCtrl+Shift+Space") or a mouse button ("Mouse4"). Empty disables it.
   hands_free_hotkey: string;
+  // The binding you hold to talk. Same forms, plus "Fn" (the default).
+  hold_hotkey: string;
   // The models chosen on the Models page (file names from models/manifest.json);
   // null means automatic: the best one installed.
   speech_model: string | null;
@@ -79,6 +81,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cleanup_level: "light",
   sound_on_start: true,
   hands_free_hotkey: "CmdOrCtrl+Shift+Space",
+  hold_hotkey: "Fn",
   speech_model: null,
   cleanup_model: null,
 };
@@ -96,14 +99,48 @@ export async function getSettings(): Promise<Settings> {
   }
 }
 
-/** Change the hands-free (toggle) shortcut. Resolves to null once it's live, or
- * to a message saying why it can't be used (the old shortcut keeps working). */
-export async function setHandsFreeHotkey(accelerator: string): Promise<string | null> {
+export type HotkeyKind = "hold" | "toggle";
+
+/** Change the hold or toggle binding. Resolves to null once it's live, or to a
+ * message saying why it can't be used (the old binding keeps working). */
+export async function setHotkey(which: HotkeyKind, binding: string): Promise<string | null> {
   try {
-    await invoke<void>("set_hands_free_hotkey", { accelerator });
+    await invoke<void>("set_hotkey", { which, binding });
     return null;
   } catch (e) {
     return typeof e === "string" ? e : null; /* browser preview: no shell */
+  }
+}
+
+/** Start recording a new binding: the current shortcuts are released so their
+ * keys can be pressed, and the next mouse button (middle or side) is reported
+ * to `onBindingCaptured` instead of dictating. */
+export async function beginBindingCapture(): Promise<void> {
+  try {
+    await invoke<void>("begin_binding_capture");
+  } catch {
+    /* browser preview — no-op */
+  }
+}
+
+/** Stop recording: the saved bindings go back in force. */
+export async function endBindingCapture(): Promise<void> {
+  try {
+    await invoke<void>("end_binding_capture");
+  } catch {
+    /* browser preview — no-op */
+  }
+}
+
+/** A mouse button pressed while recording, as a binding string ("Mouse4",
+ * "Ctrl+Mouse5"). Mouse buttons are read natively because the web view can't
+ * tell the side buttons apart. */
+export async function onBindingCaptured(cb: (binding: string) => void): Promise<() => void> {
+  try {
+    const { listen } = await import("@tauri-apps/api/event");
+    return await listen<{ binding: string }>("koe://binding/captured", (e) => cb(e.payload.binding));
+  } catch {
+    return () => {};
   }
 }
 

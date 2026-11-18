@@ -14,11 +14,13 @@ use std::num::NonZeroU32;
 
 use anyhow::Context as _;
 use llama_cpp_2::context::params::LlamaContextParams;
+use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{AddBos, LlamaModel, Special};
 use llama_cpp_2::sampling::LlamaSampler;
+use llama_cpp_2::token::LlamaToken;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
@@ -40,6 +42,8 @@ struct Request {
     #[serde(default = "default_max")]
     max_tokens: i32,
 }
+const N_CTX: u32 = 4096;
+
 fn default_max() -> i32 {
     400
 }
@@ -65,6 +69,17 @@ fn main() -> anyhow::Result<()> {
         .with_context(|| format!("failed to load model {model_path}"))?;
     eprintln!("[llm-worker] model loaded, ready");
 
+    // One context for the worker's lifetime. Every request starts with the same
+    // long system prompt and few-shot examples, so the KV cache keeps whatever
+    // prefix the last request shared with this one and only the new tail (the
+    // transcript) is evaluated — most of a cleanup's time was re-reading that
+    // prefix.
+    let ctx_params = LlamaContextParams::default()
+        .with_n_ctx(NonZeroU32::new(N_CTX))
+        .with_n_batch(N_CTX);
+    let mut ctx = model.new_context(&backend, ctx_params)?;
+    let mut cached: Vec<LlamaToken> = Vec::new();
+
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     for line in stdin.lock().lines() {
@@ -73,7 +88,7 @@ fn main() -> anyhow::Result<()> {
             continue;
         }
         let resp = match serde_json::from_str::<Request>(&line) {
-            Ok(req) => match generate(&backend, &model, &req, no_think) {
+            Ok(req) => match generate(&model, &mut ctx, &mut cached, &req, no_think) {
                 Ok(text) => Response { text, error: None },
                 Err(e) => Response {
                     text: String::new(),
@@ -92,7 +107,13 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn generate(backend: &LlamaBackend, model: &LlamaModel, req: &Request, no_think: bool) -> anyhow::Result<String> {
+fn generate(
+    model: &LlamaModel,
+    ctx: &mut LlamaContext,
+    cached: &mut Vec<LlamaToken>,
+    req: &Request,
+    no_think: bool,
+) -> anyhow::Result<String> {
     // Qwen ChatML template. Prefer the full multi-turn message list (few-shot
     // demonstrations drive the newline/list/self-correction behavior); fall back
     // to the legacy single system+user pair.
@@ -112,26 +133,71 @@ fn generate(backend: &LlamaBackend, model: &LlamaModel, req: &Request, no_think:
         prompt.push_str("<think>\n\n</think>\n\n");
     }
 
-    let ctx_params = LlamaContextParams::default().with_n_ctx(NonZeroU32::new(4096));
-    let mut ctx = model.new_context(backend, ctx_params)?;
-
     let tokens = model.str_to_token(&prompt, AddBos::Always)?;
-    let n_prompt = tokens.len() as i32;
+    anyhow::ensure!(
+        tokens.len() as i64 + i64::from(req.max_tokens) <= i64::from(N_CTX),
+        "request too long for the context"
+    );
 
-    let mut batch = LlamaBatch::new(4096, 1);
+    // Reuse the cached prefix, but always evaluate at least the last prompt
+    // token so there are fresh logits to sample from.
+    let keep = cached
+        .iter()
+        .zip(&tokens)
+        .take_while(|(a, b)| a == b)
+        .count()
+        .min(tokens.len() - 1);
+    if !ctx.clear_kv_cache_seq(Some(0), Some(keep as u32), None)? {
+        ctx.clear_kv_cache();
+        cached.clear();
+        return generate_from(model, ctx, cached, &tokens, 0, req.max_tokens);
+    }
+    cached.truncate(keep);
+    generate_from(model, ctx, cached, &tokens, keep, req.max_tokens)
+}
+
+/// Evaluate `tokens[keep..]` on top of a KV cache that already holds
+/// `tokens[..keep]`, then decode greedily. `cached` tracks what the KV cache
+/// holds afterwards; on an error it's cleared so the next request starts clean.
+fn generate_from(
+    model: &LlamaModel,
+    ctx: &mut LlamaContext,
+    cached: &mut Vec<LlamaToken>,
+    tokens: &[LlamaToken],
+    keep: usize,
+    max_tokens: i32,
+) -> anyhow::Result<String> {
+    let result = decode(model, ctx, cached, tokens, keep, max_tokens);
+    if result.is_err() {
+        ctx.clear_kv_cache();
+        cached.clear();
+    }
+    result
+}
+
+fn decode(
+    model: &LlamaModel,
+    ctx: &mut LlamaContext,
+    cached: &mut Vec<LlamaToken>,
+    tokens: &[LlamaToken],
+    keep: usize,
+    max_tokens: i32,
+) -> anyhow::Result<String> {
+    let mut batch = LlamaBatch::new(N_CTX as usize, 1);
     let last = tokens.len() - 1;
-    for (i, tok) in tokens.iter().enumerate() {
+    for (i, tok) in tokens.iter().enumerate().skip(keep) {
         batch.add(*tok, i as i32, &[0], i == last)?;
     }
     ctx.decode(&mut batch)?;
+    cached.extend_from_slice(&tokens[keep..]);
 
     let mut sampler = LlamaSampler::greedy();
-    let mut n_cur = batch.n_tokens();
+    let mut n_cur = tokens.len() as i32;
     let mut out = String::new();
-    let limit = n_prompt + req.max_tokens;
+    let limit = n_cur + max_tokens;
 
-    while n_cur <= limit {
-        let token = sampler.sample(&ctx, batch.n_tokens() - 1);
+    while n_cur < limit {
+        let token = sampler.sample(ctx, batch.n_tokens() - 1);
         sampler.accept(token);
         if model.is_eog_token(token) {
             break;
@@ -141,6 +207,7 @@ fn generate(backend: &LlamaBackend, model: &LlamaModel, req: &Request, no_think:
         batch.add(token, n_cur, &[0], true)?;
         n_cur += 1;
         ctx.decode(&mut batch)?;
+        cached.push(token);
     }
     Ok(strip_think(&out).trim().to_string())
 }
